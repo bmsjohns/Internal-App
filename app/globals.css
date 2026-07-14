@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* Prologue brand palette — Brand Guidelines V1.0, p.4–5.
+   Type: New Spirit (headers) / Good Sans (copy) are licensed faces; Fraunces
+   and Figtree stand in via the --font-* variables below. Swap by loading the
+   licensed fonts and updating the variables — see README §Brand. */
+@theme {
+  --color-paper: #f5f3ef;
+  --color-ink: #2b201c;
+  --color-rust: #ad3b28;
+  --color-rust-dark: #8c2f20;
+  --color-coral: #da4f4a;
+  --color-blush: #f5adb0;
+  --color-shell: #fbdcdc;
+
+  --font-display: var(--font-fraunces), "New Spirit", Georgia, serif;
+  --font-sans: var(--font-figtree), "Good Sans", system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+}
+
+input, select, textarea {
+  background: white;
+}

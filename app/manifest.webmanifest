@@ -1,0 +1,9 @@
+{
+  "name": "Order Book — Simply Books & Prologue",
+  "short_name": "Order Book",
+  "start_url": "/orders",
+  "display": "standalone",
+  "background_color": "#f5f3ef",
+  "theme_color": "#ad3b28",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

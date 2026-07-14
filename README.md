@@ -46,18 +46,25 @@ backfill Location = Simply Books; (4) deploy with `AIRTABLE_HAS_NEW_FIELDS=true`
 Until then the code runs with `AIRTABLE_HAS_NEW_FIELDS=false`: it neither
 reads nor writes the new fields and treats every record as Simply Books.
 
-### Status field — proposal, not yet applied
+### Status field — V2 canonical model (display-only, still no schema change)
 
 The 18 status options overlap (three flavours of "Ordered"; "Not paid"
-duplicating the Paid? field). The app ships with all 18 **grouped** in the UI
-(To do / In progress / Ready / Problems / Closed) so nothing breaks, and the
-"Legacy" group marks `Not paid` as avoid. Proposed consolidation for a later
-pass, once Ben confirms the mapping:
+duplicating the Paid? field). Since V2, the UI works with the design's **7
+canonical statuses** (Needs ordering → Ordered → In store → Ready for
+collection → Collected, plus Can't get and Cancelled):
 
-- `Not Ordered`, `Special Order`, `preordered` → **To order**
-- `Ordered`, `Ordered - In Basket`, `Ordered - extended catalogue` → **Ordered**
-- `Ready to Ship`, `Delivery` → **Ready**, `Shipped`/`Collected` → **Done**
-- `Not paid` → delete (use Paid? field), `Issue Resolved` → whatever state it resolved to
+- Every raw Airtable value **maps into one** for chips, filters and the
+  detail-page timeline (`CANONICAL_STATUSES` in `lib/config.ts`).
+- The form's status picker shows the 7 and **writes back an existing
+  Airtable option** (`writeAs`), so no schema change or typecast is needed.
+  Edits only rewrite Status when the stage actually changed, so legacy
+  values like "Ordered - In Basket" aren't silently rewritten.
+- The raw value is still shown on the order detail page ("Airtable
+  status"), so nothing is hidden.
+
+Consolidating the base itself (deleting the redundant options) remains a
+separate migration for Ben to approve — the mapping table in
+`lib/config.ts` is the proposal.
 
 ### Team Member — behavioural change (spec §6, option b)
 
@@ -112,15 +119,24 @@ service worker/offline by design.
 - Airtable rate limit (5 req/s/base) is why Postgres eventually: fine for one
   module + small team, not for several concurrent modules.
 
-## Brand
+## Brand & design (V2)
 
-Colours from the Prologue Brand Guidelines V1.0 (paper `#F5F3EF`, rust
-`#AD3B28`, coral `#DA4F4A`, blush `#F5ADB0`, shell `#FBDCDC`) as Tailwind
-tokens in `app/globals.css`. The brand faces (New Spirit / Good Sans) are
-licensed; **Fraunces / Figtree** stand in via `--font-display` / `--font-sans`
-— if Ben has webfont licences (New Spirit is on Adobe Fonts), load them and
-update the two variables. Venue badges: Prologue = brand rust; Simply Books =
-neutral ink pending its own identity (open question below).
+V2 implements Ben's Claude Design project ("Order Book.dc.html",
+claude.ai/design project `4fc6a73a…`): white sidebar shell with an app-level
+venue switcher (persisted per device) and module nav with Events/Schools
+placeholders, filter chips, a scanner-first entry screen with a "This
+session" panel, a read-only order detail page with a progress timeline, and
+a venue-grouped end-of-day list. Below `lg` the sidebar collapses to a top
+bar.
+
+Tokens in `app/globals.css` follow the design's `colors_and_type.css`
+(cream/ink/charcoal/stone + brand reds; Simply Books navy `#2B4C6F`,
+Prologue rust `#AD3B28`). The **real brand fonts** ship in `app/fonts/` via
+`next/font/local`: New Spirit (display) and Karla (sans) — both supplied by
+Ben through the design project. *Licence note:* New Spirit is a commercial
+Newlyn face; fine for this internal tool if Ben holds the licence, worth a
+check before any public deploy. Pigeon mascot + P-mark assets live in
+`public/assets/`.
 
 ## Beyond spec (spec §2b — flagged, not silent)
 

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 
 // Book metadata lookup for barcode-first entry (spec §2a "speed of entry").
-// OpenLibrary first, Google Books as fallback. Both free, no API key.
+// Google Books first (cleaner titles/authors), OpenLibrary as fallback.
+// Both free, no API key.
 
 type Params = { params: Promise<{ isbn: string }> };
 
@@ -20,6 +21,8 @@ async function fromOpenLibrary(isbn: string) {
     });
     if (a.ok) author = (await a.json()).name ?? "";
   }
+  // OpenLibrary author records sometimes carry catalogue suffixes.
+  author = author.replace(/\s*-\s*undifferentiated$/i, "").trim();
   return book.title ? { title: book.title as string, author } : null;
 }
 
@@ -48,11 +51,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   let book = null;
   try {
-    book = await fromOpenLibrary(isbn);
+    book = await fromGoogleBooks(isbn);
   } catch {}
   if (!book) {
     try {
-      book = await fromGoogleBooks(isbn);
+      book = await fromOpenLibrary(isbn);
     } catch {}
   }
   if (!book) return NextResponse.json({ error: "Not found" }, { status: 404 });

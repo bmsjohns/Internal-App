@@ -1,32 +1,57 @@
 @import "tailwindcss";
 
-/* Prologue brand palette — Brand Guidelines V1.0, p.4–5.
-   Type: New Spirit (headers) / Good Sans (copy) are licensed faces; Fraunces
-   and Figtree stand in via the --font-* variables below. Swap by loading the
-   licensed fonts and updating the variables — see README §Brand. */
+/* Prologue design-system foundations — from the Claude Design project
+   ("Order Book.dc.html" + colors_and_type.css). Brand palette per Brand
+   Book V1 p.4; ink/charcoal/stone/cream-2 are working tokens derived there.
+   Real brand faces (New Spirit / Karla) load via next/font/local. */
 @theme {
-  --color-paper: #f5f3ef;
-  --color-ink: #2b201c;
+  --color-cream: #f5f3ef;
+  --color-cream-2: #e8e3da;
+  --color-ink: #1a1714;
+  --color-charcoal: #3a322c;
+  --color-stone: #8c857c;
   --color-rust: #ad3b28;
-  --color-rust-dark: #8c2f20;
+  --color-rust-deep: #8b2d1e;
   --color-coral: #da4f4a;
   --color-blush: #f5adb0;
   --color-shell: #fbdcdc;
+  --color-navy: #2b4c6f; /* Simply Books venue colour */
+  --color-ochre: #b0812f; /* status: needs ordering */
+  --color-moss: #5f7355; /* status: collected / paid */
+  --color-fog: #b8b0a6; /* status: cancelled */
 
-  --font-display: var(--font-fraunces), "New Spirit", Georgia, serif;
-  --font-sans: var(--font-figtree), "Good Sans", system-ui, sans-serif;
+  --font-display: var(--font-new-spirit), Georgia, serif;
+  --font-sans: var(--font-karla), -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-karla), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --tracking-caps: 0.16em;
 }
 
 body {
-  background: var(--color-paper);
+  background: var(--color-cream);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3 {
   font-family: var(--font-display);
+  font-weight: 400;
 }
 
-input, select, textarea {
-  background: white;
+input::placeholder, textarea::placeholder { color: #a9a196; }
+::selection { background: var(--color-rust); color: var(--color-cream); }
+
+/* the ALL-CAPS section opener */
+.eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
 }
+
+@keyframes ob-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.ob-screen { animation: ob-fade 360ms cubic-bezier(0.2, 0.7, 0.2, 1); }

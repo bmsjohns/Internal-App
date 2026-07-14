@@ -1,20 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Location, Order } from "@/lib/types";
-import { LOCATIONS } from "@/lib/types";
-import { NEEDS_ORDERING_STATUSES } from "@/lib/config";
-import { VenueBadge } from "@/components/badges";
+import Image from "next/image";
+import type { Order } from "@/lib/types";
+import { canonicalStatus, VENUES, venueKeyOf, type VenueKey } from "@/lib/config";
+import { useVenue } from "@/components/VenueContext";
+import PageHeader, { btnGhost, btnPrimary } from "@/components/PageHeader";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-// End-of-day summary (spec §4.5, §11a.5): in-app list of books that still
-// need ordering from that day's activity, built for fast transfer into the
-// existing stock system — copy as rows or download CSV.
+type Row = { title: string; author: string; isbn: string; qty: number };
+
+// End-of-day summary (spec §4.5, §11a.5): everything still "Needs ordering"
+// from that day's activity, grouped by venue, built for fast transfer into
+// the stock system — copy rows or export CSV. Row count is the quantity.
 export default function SummaryPage() {
+  const { venue } = useVenue();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [date, setDate] = useState(today());
-  const [location, setLocation] = useState<Location | "">("");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -23,29 +26,32 @@ export default function SummaryPage() {
       .then((d) => setOrders(d.orders ?? []));
   }, []);
 
-  const rows = useMemo(() => {
+  const groups = useMemo(() => {
     if (!orders) return [];
     const active = orders.filter((o) => {
-      if (!NEEDS_ORDERING_STATUSES.includes(o.status)) return false;
-      if (location && o.location !== location) return false;
-      const touched = (o.lastModified || o.orderDate).slice(0, 10);
-      const created = o.orderDate.slice(0, 10);
-      return touched === date || created === date;
+      if (canonicalStatus(o.status).key !== "needs-ordering") return false;
+      if (venue !== "all" && venueKeyOf(o.location) !== venue) return false;
+      return o.orderDate.slice(0, 10) === date || (o.lastModified || o.orderDate).slice(0, 10) === date;
     });
-    // Same book ordered for several customers → one line with quantity.
-    const byKey = new Map<string, { title: string; author: string; isbn: string; qty: number; location: Location }>();
-    for (const o of active) {
-      const key = `${o.isbn || o.bookTitle}|${o.location}`;
-      const row = byKey.get(key);
-      if (row) row.qty += 1;
-      else byKey.set(key, { title: o.bookTitle, author: o.author, isbn: o.isbn, qty: 1, location: o.location });
-    }
-    return [...byKey.values()].sort((a, b) => a.title.localeCompare(b.title));
-  }, [orders, date, location]);
+    return (Object.keys(VENUES) as VenueKey[])
+      .map((k) => {
+        const byKey = new Map<string, Row>();
+        for (const o of active.filter((x) => venueKeyOf(x.location) === k)) {
+          const key = o.isbn || o.bookTitle;
+          const row = byKey.get(key);
+          if (row) row.qty += 1;
+          else byKey.set(key, { title: o.bookTitle, author: o.author, isbn: o.isbn, qty: 1 });
+        }
+        const rows = [...byKey.values()].sort((a, b) => a.title.localeCompare(b.title));
+        return { key: k, venue: VENUES[k].label, color: VENUES[k].color, rows, count: rows.reduce((n, r) => n + r.qty, 0) };
+      })
+      .filter((g) => g.count > 0);
+  }, [orders, date, venue]);
 
-  const tsv = rows.map((r) => [r.title, r.author, r.isbn, r.qty].join("\t")).join("\n");
+  const allRows = groups.flatMap((g) => g.rows.map((r) => ({ ...r, venue: g.venue })));
 
   function copy() {
+    const tsv = allRows.map((r) => [r.title, r.author, r.isbn, r.qty].join("\t")).join("\n");
     navigator.clipboard.writeText(tsv).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -55,93 +61,96 @@ export default function SummaryPage() {
   function downloadCsv() {
     const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
     const csv =
-      "Title,Author,ISBN,Quantity\n" +
-      rows.map((r) => [esc(r.title), esc(r.author), esc(r.isbn), r.qty].join(",")).join("\n");
+      "Title,Author,ISBN,Quantity,Venue\n" +
+      allRows.map((r) => [esc(r.title), esc(r.author), esc(r.isbn), r.qty, esc(r.venue)].join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `to-order-${date}${location ? `-${location.toLowerCase().replace(" ", "-")}` : ""}.csv`;
+    a.download = `to-order-${date}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   }
 
+  const dateLabel = new Date(date + "T12:00:00").toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
   return (
-    <div>
-      <h1 className="text-3xl font-semibold">End of day — books to order</h1>
-      <p className="mt-1 text-sm text-ink/60">
-        Orders added or updated on the chosen day that are still waiting to be ordered
-        ({NEEDS_ORDERING_STATUSES.join(", ")}). Copy or export, then re-enter into the stock system.
-      </p>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="rounded-md border border-ink/20 px-3 py-2 text-sm"
-        />
-        <div className="flex overflow-hidden rounded-md border border-ink/20 text-sm">
-          <button onClick={() => setLocation("")} className={`px-3 py-2 ${location === "" ? "bg-rust text-paper" : "bg-white"}`}>
-            Both venues
-          </button>
-          {LOCATIONS.map((l) => (
-            <button key={l} onClick={() => setLocation(l)} className={`border-l border-ink/20 px-3 py-2 ${location === l ? "bg-rust text-paper" : "bg-white"}`}>
-              {l}
+    <div className="ob-screen flex min-h-screen flex-col">
+      <PageHeader
+        compact
+        backHref="/orders"
+        eyebrow={`${dateLabel} · ${venue === "all" ? "both venues" : VENUES[venue].label}`}
+        title="End-of-day ordering list"
+        actions={
+          <>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="rounded border-[1.5px] border-cream-2 bg-white px-3 py-2 text-[13px] font-semibold text-charcoal"
+            />
+            <button onClick={copy} disabled={allRows.length === 0} className={btnGhost}>
+              {copied ? "Copied ✓" : "Copy list"}
             </button>
-          ))}
-        </div>
-        <div className="ml-auto flex gap-2">
-          <button
-            onClick={copy}
-            disabled={rows.length === 0}
-            className="rounded-full bg-rust px-4 py-2 text-sm font-semibold text-paper hover:bg-rust-dark disabled:opacity-40"
-          >
-            {copied ? "Copied ✓" : "Copy rows"}
-          </button>
-          <button
-            onClick={downloadCsv}
-            disabled={rows.length === 0}
-            className="rounded-full border border-rust px-4 py-2 text-sm font-semibold text-rust hover:bg-shell disabled:opacity-40"
-          >
-            Download CSV
-          </button>
-        </div>
-      </div>
+            <button onClick={downloadCsv} disabled={allRows.length === 0} className={btnPrimary}>
+              Export CSV
+            </button>
+          </>
+        }
+      />
 
-      {!orders ? (
-        <p className="mt-6 text-ink/50">Loading…</p>
-      ) : (
-        <div className="mt-4 overflow-x-auto rounded-lg border border-ink/15 bg-white">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-ink/15 text-left text-xs uppercase tracking-wide text-ink/50">
-                <th className="px-3 py-2">Title</th>
-                <th className="px-3 py-2">Author</th>
-                <th className="px-3 py-2">ISBN</th>
-                <th className="px-3 py-2">Qty</th>
-                <th className="px-3 py-2">Venue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} className="border-b border-ink/10 last:border-0">
-                  <td className="px-3 py-2 font-medium">{r.title}</td>
-                  <td className="px-3 py-2 text-ink/80">{r.author}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-ink/70">{r.isbn || "—"}</td>
-                  <td className="px-3 py-2">{r.qty}</td>
-                  <td className="px-3 py-2"><VenueBadge location={r.location} /></td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-10 text-center text-ink/50">
-                    Nothing left to order for this day. 🎉
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="mx-auto w-full max-w-[920px] flex-1 px-5 pb-12 pt-[26px] sm:px-8">
+        <p className="mb-5 max-w-[620px] text-charcoal">
+          Everything marked <strong className="text-rust">Needs ordering</strong> that day, grouped by venue —
+          ready to key into the stock system. Row count is your quantity.
+        </p>
+
+        {!orders && <p className="text-stone">Loading…</p>}
+
+        {orders && groups.length === 0 && (
+          <div className="flex flex-col items-center py-16 text-center">
+            <Image src="/assets/bird-delivering-book.png" alt="" width={140} height={100} className="mb-4 h-auto w-[140px] opacity-90" />
+            <div className="font-display text-2xl">All caught up.</div>
+            <p className="mt-2 text-charcoal">Nothing left to order for this day.</p>
+          </div>
+        )}
+
+        {groups.map((g) => (
+          <div key={g.key} className="mb-[26px]">
+            <div className="mb-2.5 flex items-center gap-[9px]">
+              <span className="h-[11px] w-[11px] rounded-full" style={{ background: g.color }} />
+              <h3 className="m-0 font-display text-xl">{g.venue}</h3>
+              <span className="text-xs text-stone">{g.count} to order</span>
+            </div>
+            <div className="overflow-hidden rounded-lg border border-cream-2 bg-white">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="eyebrow bg-cream text-left text-stone">
+                      <th className="px-4 py-2.5 font-semibold">Title</th>
+                      <th className="px-4 py-2.5 font-semibold">Author</th>
+                      <th className="px-4 py-2.5 font-semibold">ISBN</th>
+                      <th className="px-4 py-2.5 text-right font-semibold">Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.rows.map((r, i) => (
+                      <tr key={i} className="border-t border-cream-2">
+                        <td className="px-4 py-[11px] font-semibold text-ink">{r.title}</td>
+                        <td className="px-4 py-[11px] text-charcoal">{r.author}</td>
+                        <td className="px-4 py-[11px] font-mono text-[13px] text-stone">{r.isbn || "—"}</td>
+                        <td className="px-4 py-[11px] text-right tabular-nums text-ink">{r.qty}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

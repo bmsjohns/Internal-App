@@ -1,16 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Figtree } from "next/font/google";
+import localFont from "next/font/local";
 import { ClerkProvider } from "@clerk/nextjs";
 import { clerkEnabled, getSessionUser } from "@/lib/auth";
-import Nav from "@/components/Nav";
+import Sidebar from "@/components/Sidebar";
+import { VenueProvider } from "@/components/VenueContext";
 import "./globals.css";
 
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
-  axes: ["SOFT", "opsz"],
+const newSpirit = localFont({
+  src: "./fonts/NewSpirit-Regular.otf",
+  variable: "--font-new-spirit",
 });
-const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree" });
+const karla = localFont({
+  src: [
+    { path: "./fonts/Karla-Regular.ttf", weight: "400" },
+    { path: "./fonts/Karla-SemiBold.ttf", weight: "600" },
+  ],
+  variable: "--font-karla",
+});
 
 export const metadata: Metadata = {
   title: "Order Book",
@@ -26,10 +32,14 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser();
   const body = (
-    <html lang="en" className={`${fraunces.variable} ${figtree.variable}`}>
+    <html lang="en" className={`${newSpirit.variable} ${karla.variable}`}>
       <body className="min-h-screen">
-        <Nav user={user} />
-        <main className="mx-auto max-w-5xl px-4 pb-24 pt-6">{children}</main>
+        <VenueProvider>
+          <div className="flex min-h-screen">
+            <Sidebar user={user} />
+            <main className="min-w-0 flex-1 bg-cream">{children}</main>
+          </div>
+        </VenueProvider>
       </body>
     </html>
   );

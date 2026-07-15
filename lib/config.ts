@@ -97,13 +97,16 @@ export function canonicalStatus(raw: string): CanonicalStatus {
 /** The five stages shown on the order-detail progress timeline. */
 export const TIMELINE_KEYS = ["needs-ordering", "ordered", "in-store", "ready", "collected"];
 
-export const PAID_OPTIONS = ["Paid", "Not Paid", "Paid Online", "Ordered"];
-export const PAID_COLORS: Record<string, string> = {
-  Paid: "#5F7355",
-  "Paid Online": "#5F7355",
-  "Not Paid": "#B0812F",
-  Ordered: "#8C857C",
-};
+// V3 §2: Paid? simplified to Paid / Not Paid. The form only writes these two
+// (both exist in Airtable already); legacy values map for display — "Paid
+// Online" counts as Paid, the stray "Ordered" as Not Paid (ordering status
+// belongs on Status, not Paid?). Raw value stays visible on the detail page.
+export const PAID_OPTIONS = ["Paid", "Not Paid"];
+
+export function paidDisplay(raw: string): { label: "Paid" | "Not Paid"; color: string } {
+  const isPaid = raw === "Paid" || raw === "Paid Online";
+  return { label: isPaid ? "Paid" : "Not Paid", color: isPaid ? "#5F7355" : "#B0812F" };
+}
 
 export const DELIVERY_METHODS = ["Collection", "Delivery", "Drop-Off"];
 
@@ -116,6 +119,11 @@ export const TEAM_MEMBER_OPTIONS = [
   "Charlotte", "Berivan", "Barbara", "Rachel", "Ines", "Sandra", "Anya",
   "Lara", "Jess", "Sophie", "Liv S", "gemma", "lar",
 ];
+
+/** De-duplicated, alphabetised list for the V3 team-member picker (§6). */
+export const TEAM_MEMBER_CHOICES = [...new Set(TEAM_MEMBER_OPTIONS.map((o) => o.trim()))].sort(
+  (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })
+);
 
 /** Match a logged-in user's name to an existing Team Member option, if any. */
 export function matchTeamMember(userName: string): string | null {

@@ -27,8 +27,9 @@ async function fromOpenLibrary(isbn: string) {
 }
 
 async function fromGoogleBooks(isbn: string) {
+  // country=GB biases Google Books towards the UK edition's title (V3 §8).
   const res = await fetch(
-    `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`,
+    `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&country=GB`,
     { signal: AbortSignal.timeout(4000) }
   );
   if (!res.ok) return null;

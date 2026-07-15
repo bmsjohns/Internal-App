@@ -15,8 +15,10 @@ const ic = (p: string) => (
 const MODULES = [
   { href: "/orders", label: "Orders", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>' },
   { href: "/customers", label: "Customers", icon: '<circle cx="12" cy="8" r="4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>' },
-  { href: "/summary", label: "End of day", icon: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>' },
+  { href: "/to-order", label: "To order", icon: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>' },
 ];
+
+const SETTINGS_ICON = '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/>';
 
 const COMING_SOON = [
   { label: "Events", icon: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>' },
@@ -128,7 +130,7 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
               >
                 <span className="flex w-5 justify-center">{ic(m.icon)}</span>
                 <span className="flex-1">{m.label}</span>
-                {m.href === "/orders" && needsCount > 0 && (
+                {m.href === "/to-order" && needsCount > 0 && (
                   <span className="min-w-5 rounded-full bg-rust px-2 py-px text-center text-[11px] font-semibold text-cream">
                     {needsCount}
                   </span>
@@ -145,6 +147,22 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
               </span>
             </span>
           ))}
+          {user?.permissions.includes("settings:manage") && (
+            <>
+              <div className="mx-1 my-3 h-px bg-cream-2" />
+              <Link
+                href="/settings"
+                className={`flex w-full items-center gap-3 rounded-md px-3 py-[9px] text-sm transition-colors ${
+                  pathname.startsWith("/settings")
+                    ? "bg-shell font-semibold text-rust"
+                    : "font-medium text-charcoal hover:bg-ink/5"
+                }`}
+              >
+                <span className="flex w-5 justify-center">{ic(SETTINGS_ICON)}</span>
+                <span className="flex-1">Settings</span>
+              </Link>
+            </>
+          )}
         </nav>
 
         <div className="flex items-center gap-2.5 border-t border-cream-2 px-4 py-3.5">

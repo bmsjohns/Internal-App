@@ -2,9 +2,11 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getDataSource } from "@/lib/data";
 import { canDeleteAt, getSessionUser } from "@/lib/auth";
-import { canonicalStatus, CANONICAL_STATUSES, TIMELINE_KEYS, VENUES, venueKeyOf } from "@/lib/config";
+import { VENUES, venueKeyOf } from "@/lib/config";
 import PageHeader, { btnGhost } from "@/components/PageHeader";
 import { Avatar, StatusChip } from "@/components/chips";
+import BookCover from "@/components/BookCover";
+import StatusTimeline from "@/components/StatusTimeline";
 import DeleteOrderButton from "@/components/DeleteOrderButton";
 
 export const dynamic = "force-dynamic";
@@ -20,12 +22,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   if (!order) notFound();
   const customer = order.customerIds[0] ? await ds.getCustomer(order.customerIds[0]) : null;
 
-  const status = canonicalStatus(order.status);
-  const curIdx = TIMELINE_KEYS.indexOf(status.key);
   const venue = VENUES[venueKeyOf(order.location)];
 
   const facts: [string, string][] = [
     ["Paid", order.paid || "—"],
+    ["Quantity", String(order.quantity)],
+    ["Price", order.price != null ? `£${order.price.toFixed(2)}` : "—"],
+    ["Supplier", order.publisher || "—"],
     ["Delivery", order.deliveryMethod || "—"],
     ["Location", venue.label],
     ["Team member", order.teamMember || "—"],
@@ -55,67 +58,45 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
       <div className="mx-auto grid w-full max-w-[1080px] grid-cols-1 gap-8 px-5 pb-12 pt-7 sm:px-8 lg:grid-cols-[1.5fr_1fr]">
         <div>
-          <div className="mb-1.5 flex flex-wrap items-center gap-2">
-            {order.isPreorder && (
-              <span className="rounded-full border border-coral px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-coral">
-                Pre-order
-              </span>
-            )}
-            {order.specialOrder && (
-              <span className="rounded-full border border-cream-2 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-charcoal">
-                Special order
-              </span>
-            )}
+          <div className="flex gap-5">
+            <BookCover isbn={order.isbn} title={order.bookTitle} />
+            <div className="min-w-0">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                {order.isPreorder && (
+                  <span className="rounded-full border border-coral px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-coral">
+                    Pre-order
+                  </span>
+                )}
+                {order.specialOrder && (
+                  <span className="rounded-full border border-cream-2 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-charcoal">
+                    Special order
+                  </span>
+                )}
+                {order.quantity > 1 && (
+                  <span className="rounded-full border border-cream-2 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-charcoal">
+                    ×{order.quantity}
+                  </span>
+                )}
+              </div>
+              <h1 className="m-0 text-[34px] leading-[1.05] tracking-[-0.02em]">{order.bookTitle}</h1>
+              {order.author && <div className="mt-1.5 text-[17px] text-charcoal">{order.author}</div>}
+              {order.isbn && <div className="mt-1.5 font-mono text-[13px] text-stone">ISBN {order.isbn}</div>}
+            </div>
           </div>
-          <h1 className="m-0 text-[38px] leading-[1.02] tracking-[-0.02em]">{order.bookTitle}</h1>
-          {order.author && <div className="mt-1.5 text-[17px] text-charcoal">{order.author}</div>}
-          {order.isbn && <div className="mt-1.5 font-mono text-[13px] text-stone">ISBN {order.isbn}</div>}
           {order.notes && (
             <div className="mt-5 rounded-lg border border-cream-2 bg-white px-4 py-3 text-sm text-charcoal">
               {order.notes}
             </div>
           )}
 
-          {/* progress timeline */}
           <div className="mt-8">
-            <div className="eyebrow mb-3.5 text-stone">Progress</div>
-            {curIdx === -1 ? (
-              <p className="text-sm text-charcoal">
-                This order is <strong style={{ color: status.color }}>{status.label}</strong> — not on the usual path.
-              </p>
-            ) : (
-              <div className="flex flex-col">
-                {TIMELINE_KEYS.map((k, i) => {
-                  const s = CANONICAL_STATUSES.find((x) => x.key === k)!;
-                  const done = i <= curIdx;
-                  const isCur = i === curIdx;
-                  return (
-                    <div key={k} className="flex gap-3.5">
-                      <div className="flex shrink-0 flex-col items-center">
-                        <span
-                          className="h-3.5 w-3.5 rounded-full border-2"
-                          style={{
-                            background: done ? s.color : "#fff",
-                            borderColor: done ? s.color : "#D8D1C6",
-                          }}
-                        />
-                        {i < TIMELINE_KEYS.length - 1 && (
-                          <span className="min-h-3.5 w-0.5 flex-1" style={{ background: i < curIdx ? s.color : "#E3DCD1" }} />
-                        )}
-                      </div>
-                      <div className="pb-4">
-                        <div className="text-sm font-semibold" style={{ color: done ? "var(--color-ink)" : "var(--color-stone)" }}>
-                          {s.label}
-                        </div>
-                        <div className="text-[12.5px] text-stone">
-                          {isCur ? `Updated ${fmt(order.lastModified)}` : done ? "" : "Pending"}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <div className="eyebrow mb-3.5 text-stone">Progress — click a stage to update</div>
+            <StatusTimeline
+              orderId={order.id}
+              rawStatus={order.status}
+              lastModified={order.lastModified}
+              log={order.statusLog}
+            />
           </div>
         </div>
 
@@ -140,13 +121,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <div className="eyebrow mb-3 text-stone">Customer</div>
             {customer ? (
               <>
-                <div className="flex items-center gap-3">
+                <Link href={`/customers/${customer.id}`} className="flex items-center gap-3 no-underline hover:opacity-80">
                   <Avatar name={customer.name} size={42} />
                   <div className="leading-snug">
-                    <div className="text-[15px] font-semibold">{customer.name}</div>
+                    <div className="text-[15px] font-semibold text-ink">{customer.name}</div>
                     {customer.phone && <div className="text-[13px] text-stone">{customer.phone}</div>}
                   </div>
-                </div>
+                </Link>
                 {(customer.email || customer.address) && (
                   <div className="mt-3 border-t border-cream-2 pt-3 text-[13px] leading-relaxed text-charcoal">
                     {customer.email}

@@ -23,9 +23,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (body.bookTitle !== undefined && !body.bookTitle.trim()) {
     return NextResponse.json({ error: "Book title is required" }, { status: 400 });
   }
+  if (body.quantity !== undefined && (!Number.isInteger(body.quantity) || body.quantity < 1)) {
+    return NextResponse.json({ error: "Quantity must be a whole number of 1 or more" }, { status: 400 });
+  }
   const ds = getDataSource();
-  if (!(await ds.getOrder(id))) {
+  const existing = await ds.getOrder(id);
+  if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  // V3 §5 audit trail: every status change records who and when.
+  if (typeof body.status === "string" && body.status !== existing.status) {
+    body.statusLog = [
+      ...existing.statusLog,
+      { at: new Date().toISOString(), by: user.name, status: body.status },
+    ];
+  } else {
+    delete body.statusLog; // never writable directly from the client
   }
   const order = await ds.updateOrder(id, body);
   return NextResponse.json({ order });

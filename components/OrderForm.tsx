@@ -1,18 +1,20 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import type { Location, Order } from "@/lib/types";
+import type { Location, Order, Supplier } from "@/lib/types";
 import {
   canonicalStatus,
   CANONICAL_STATUSES,
   DELIVERY_METHODS,
   PAID_OPTIONS,
+  TEAM_MEMBER_CHOICES,
   VENUES,
   venueKeyOf,
 } from "@/lib/config";
 import { useVenue } from "./VenueContext";
+import { btnGhost, btnPrimary } from "./PageHeader";
 import CustomerPicker, { type PickedCustomer } from "./CustomerPicker";
 
 type Draft = {
@@ -27,6 +29,10 @@ type Draft = {
   preorderPublicationDate: string;
   location: Location;
   notes: string;
+  publisher: string;
+  priceStr: string;
+  quantity: number;
+  teamMember: string; // "" = default to the logged-in user (server-side)
 };
 
 const emptyDraft = (location: Location): Draft => ({
@@ -41,6 +47,10 @@ const emptyDraft = (location: Location): Draft => ({
   preorderPublicationDate: "",
   location,
   notes: "",
+  publisher: "",
+  priceStr: "",
+  quantity: 1,
+  teamMember: "",
 });
 
 const labelCls = "eyebrow mb-[7px] block text-charcoal";
@@ -82,9 +92,20 @@ export default function OrderForm({
           preorderPublicationDate: order.preorderPublicationDate ?? "",
           location: order.location,
           notes: order.notes,
+          publisher: order.publisher,
+          priceStr: order.price != null ? String(order.price) : "",
+          quantity: order.quantity,
+          teamMember: order.teamMember,
         }
       : emptyDraft(venue === "prologue" ? "Prologue" : "Simply Books")
   );
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  useEffect(() => {
+    fetch("/api/suppliers")
+      .then((r) => r.json())
+      .then((d) => setSuppliers(d.suppliers ?? []))
+      .catch(() => {});
+  }, []);
   const [picked, setPicked] = useState<PickedCustomer>(customer ?? null);
   const [added, setAdded] = useState<Order[]>([]);
   const [busy, setBusy] = useState(false);
@@ -126,9 +147,16 @@ export default function OrderForm({
     }
     setBusy(true);
     try {
-      const { statusKey, ...rest } = draft;
+      const { statusKey, priceStr, ...rest } = draft;
+      const price = priceStr.trim() === "" ? null : Number(priceStr);
+      if (price !== null && (Number.isNaN(price) || price < 0)) {
+        setError("Price must be a number");
+        setBusy(false);
+        return;
+      }
       const payload: Record<string, unknown> = {
         ...rest,
+        price,
         preorderPublicationDate: draft.isPreorder ? draft.preorderPublicationDate || null : null,
         customerIds: picked ? [picked.id] : [],
       };
@@ -227,18 +255,55 @@ export default function OrderForm({
             </label>
             <input id="author" value={draft.author} onChange={(e) => set("author", e.target.value)} className={inputCls} />
           </div>
-          <div>
-            <label className={labelCls} htmlFor="pubdate">
-              Pub. date <span className="normal-case tracking-normal text-stone">(pre-orders)</span>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls} htmlFor="price">
+                Price (£)
+              </label>
+              <input
+                id="price"
+                inputMode="decimal"
+                placeholder="—"
+                value={draft.priceStr}
+                onChange={(e) => set("priceStr", e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="qty">
+                Quantity
+              </label>
+              <input
+                id="qty"
+                type="number"
+                min={1}
+                value={draft.quantity}
+                onChange={(e) => set("quantity", Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                className={inputCls}
+              />
+            </div>
+          </div>
+          {/* V3 §6: the pre-order question comes BEFORE the date it makes relevant */}
+          <div className="flex items-center gap-[22px] sm:col-span-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-charcoal">
+              <input type="checkbox" checked={draft.specialOrder} onChange={(e) => set("specialOrder", e.target.checked)} className="h-4 w-4 accent-rust" />
+              Special order
             </label>
-            <input
-              id="pubdate"
-              type="date"
-              disabled={!draft.isPreorder}
-              value={draft.preorderPublicationDate}
-              onChange={(e) => set("preorderPublicationDate", e.target.value)}
-              className={`${inputCls} disabled:opacity-45`}
-            />
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-charcoal">
+              <input type="checkbox" checked={draft.isPreorder} onChange={(e) => set("isPreorder", e.target.checked)} className="h-4 w-4 accent-rust" />
+              Pre-order
+            </label>
+            {draft.isPreorder && (
+              <label className="flex items-center gap-2">
+                <span className="eyebrow text-charcoal">Pub. date</span>
+                <input
+                  type="date"
+                  value={draft.preorderPublicationDate}
+                  onChange={(e) => set("preorderPublicationDate", e.target.value)}
+                  className="rounded-md border border-cream-2 bg-white px-2.5 py-2 text-sm text-ink"
+                />
+              </label>
+            )}
           </div>
         </div>
 
@@ -302,15 +367,44 @@ export default function OrderForm({
               ))}
             </div>
           </div>
-          <div className="flex gap-[22px] sm:col-span-2">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-charcoal">
-              <input type="checkbox" checked={draft.specialOrder} onChange={(e) => set("specialOrder", e.target.checked)} className="h-4 w-4 accent-rust" />
-              Special order
+          <div>
+            <label className={labelCls} htmlFor="teamMember">
+              Team member
             </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-charcoal">
-              <input type="checkbox" checked={draft.isPreorder} onChange={(e) => set("isPreorder", e.target.checked)} className="h-4 w-4 accent-rust" />
-              Pre-order
+            <select
+              id="teamMember"
+              value={draft.teamMember}
+              onChange={(e) => set("teamMember", e.target.value)}
+              className={`${inputCls} cursor-pointer`}
+            >
+              <option value="">{editing ? "Unassigned" : "Me (default)"}</option>
+              {TEAM_MEMBER_CHOICES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="publisher">
+              Supplier <span className="normal-case tracking-normal text-stone">(usually set when ordering)</span>
             </label>
+            <select
+              id="publisher"
+              value={draft.publisher}
+              onChange={(e) => set("publisher", e.target.value)}
+              className={`${inputCls} cursor-pointer`}
+            >
+              <option value="">Not set</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+              {draft.publisher && !suppliers.some((s) => s.name === draft.publisher) && (
+                <option value={draft.publisher}>{draft.publisher}</option>
+              )}
+            </select>
           </div>
           <div className="sm:col-span-2">
             <label className={labelCls} htmlFor="notes">
@@ -324,20 +418,15 @@ export default function OrderForm({
 
         <div className="mt-[26px] flex gap-2.5">
           {editing ? (
-            <button type="submit" disabled={busy} className="cursor-pointer rounded border-[1.5px] border-rust bg-rust px-[22px] py-3 text-sm font-semibold text-cream hover:bg-rust-deep disabled:opacity-50">
+            <button type="submit" disabled={busy} className={btnPrimary}>
               {busy ? "Saving…" : "Save changes"}
             </button>
           ) : (
             <>
-              <button type="submit" disabled={busy} className="cursor-pointer rounded border-[1.5px] border-rust bg-rust px-[22px] py-3 text-sm font-semibold text-cream hover:bg-rust-deep disabled:opacity-50">
+              <button type="submit" disabled={busy} className={btnPrimary}>
                 {busy ? "Saving…" : "Save & add another"}
               </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => save(true)}
-                className="cursor-pointer rounded border-[1.5px] border-cream-2 bg-white px-[22px] py-3 text-sm font-semibold text-charcoal hover:border-ink disabled:opacity-50"
-              >
+              <button type="button" disabled={busy} onClick={() => save(true)} className={btnGhost}>
                 Save & view
               </button>
             </>

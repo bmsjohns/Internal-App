@@ -43,7 +43,11 @@ export default function PageHeader({
   );
 }
 
-export const btnPrimary =
-  "inline-flex items-center gap-1.5 rounded border-[1.5px] border-rust bg-rust px-[17px] py-2.5 text-[13px] font-semibold text-cream hover:bg-rust-deep hover:border-rust-deep cursor-pointer disabled:opacity-50";
-export const btnGhost =
-  "inline-flex items-center gap-1.5 rounded border-[1.5px] border-cream-2 bg-white px-[15px] py-[9px] text-[13px] font-semibold text-charcoal hover:border-ink hover:text-ink cursor-pointer disabled:opacity-50";
+// Button hierarchy (V3 §9): primary and secondary share IDENTICAL geometry
+// (padding, border width, radius, type size) — only fill and colour signal
+// rank. Danger shares the secondary geometry with brand-red colouring.
+const btnBase =
+  "inline-flex items-center justify-center gap-1.5 rounded border-[1.5px] px-[17px] py-2.5 text-[13px] font-semibold cursor-pointer disabled:opacity-50";
+export const btnPrimary = `${btnBase} border-rust bg-rust text-cream hover:bg-rust-deep hover:border-rust-deep`;
+export const btnGhost = `${btnBase} border-cream-2 bg-white text-charcoal hover:border-ink hover:text-ink`;
+export const btnDanger = `${btnBase} border-rust bg-transparent text-rust hover:bg-shell`;

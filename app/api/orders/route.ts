@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDataSource } from "@/lib/data";
 import { getSessionUser } from "@/lib/auth";
-import { matchTeamMember, DEFAULT_LOCATION } from "@/lib/config";
+import { matchTeamMember, DEFAULT_LOCATION, TEAM_MEMBER_OPTIONS } from "@/lib/config";
 import type { OrderInput } from "@/lib/types";
 
 export async function GET() {
@@ -29,16 +29,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Book title is required" }, { status: 400 });
   }
 
+  // V3 §6: default to the logged-in user, but an explicit pick of another
+  // team member (ordering on someone's behalf) is allowed if it's a real
+  // option — never write a string Airtable doesn't know.
+  const pickedMember =
+    typeof body.teamMember === "string" && TEAM_MEMBER_OPTIONS.includes(body.teamMember)
+      ? body.teamMember
+      : null;
+
+  const status = body.status ?? "Not Ordered";
+  const quantity = Number.isInteger(body.quantity) && body.quantity > 0 ? body.quantity : 1;
+
   const input: OrderInput = {
     bookTitle: body.bookTitle.trim(),
     author: body.author?.trim() ?? "",
     isbn: body.isbn?.trim() ?? "",
     customerIds: body.customerIds ?? [],
-    // Team Member is set from the logged-in user, not a picker (spec §6,
-    // option b). Falls back to blank if their name isn't an existing option.
-    teamMember: matchTeamMember(user.name) ?? "",
+    teamMember: pickedMember ?? matchTeamMember(user.name) ?? "",
     paid: body.paid ?? "Not Paid",
-    status: body.status ?? "Not Ordered",
+    status,
+    publisher: body.publisher?.trim() ?? "",
+    price: typeof body.price === "number" && body.price >= 0 ? body.price : null,
+    quantity,
+    statusLog: [{ at: new Date().toISOString(), by: user.name, status }],
     specialOrder: !!body.specialOrder,
     isPreorder: !!body.isPreorder,
     preorderPublicationDate: body.isPreorder ? (body.preorderPublicationDate || null) : null,

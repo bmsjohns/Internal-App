@@ -26,8 +26,13 @@ action in Airtable):
 
 | Table  | Field    | Type                                        | Why |
 |--------|----------|---------------------------------------------|-----|
-| Orders | Location | single select: `Simply Books`, `Prologue`   | The one Ben flagged. After adding it, select-all existing records → set to `Simply Books` (confirmed default for all past orders). |
-| Orders | Notes    | long text                                   | Beyond spec: there is nowhere to record per-order context ("wants it signed", "reprint due"). The form and detail page support it. |
+| Orders | Location | single select: `Simply Books`, `Prologue`   | The one Ben flagged (V1). After adding it, select-all existing records → set to `Simply Books` (confirmed default for all past orders). |
+| Orders | Notes    | long text                                   | Beyond spec (V1): per-order context ("wants it signed", "reprint due"). |
+| Orders | Publisher | **single line text** (recommended over single select) | V3 §1. Text rather than select because the app constrains values to the Suppliers list anyway (picker, not free typing), and a select would need a new option added in Airtable every time a supplier is added in Settings — two places to maintain the same list. |
+| Orders | Price    | currency (£, 2 dp)                          | V3 §1. |
+| Orders | Quantity | number (integer), backfill existing → 1     | V3 §1: one order line can now be several copies. |
+| Orders | Status Log | long text                                 | V3 §5 audit trail: one line per status change, `ISO timestamp\|name\|status`. App-maintained; don't hand-edit. |
+| **Suppliers** (new table) | Name (primary), Cadence (text), Account Number (text) | — | V3 §3/§4: per-supplier ordering cadence + the shop's account number (printed on the export). |
 
 **Recommendation: add fields to the existing base — do not split by venue.**
 A separate base per venue would break the combined queue (two API sources,
@@ -64,7 +69,66 @@ collection → Collected, plus Can't get and Cancelled):
 
 Consolidating the base itself (deleting the redundant options) remains a
 separate migration for Ben to approve — the mapping table in
-`lib/config.ts` is the proposal.
+`lib/config.ts` is the proposal. It matches the V3 spec's suggested set,
+plus **Can't get** (the V3 list dropped it, but live data uses it and it's a
+real outcome — flagging rather than silently removing).
+
+**Paid? (V3 §2):** the form now offers only Paid / Not Paid and chips
+display every legacy value as one of the two ("Paid Online" → Paid, the
+stray "Ordered" → Not Paid). The raw value stays visible on the detail
+page, so the online-vs-in-store distinction isn't lost yet — whether to
+delete "Paid Online" from the base is Ben's call in the same migration.
+
+## V3 — what changed
+
+- **To Order page** (`/to-order`, replaces End-of-day; old URL redirects):
+  the outstanding queue with per-row quantity steppers, a supplier picker
+  at the point of ordering (with that supplier's cadence shown), and
+  one-click "Mark ordered". *Default chosen:* no daily cutoff — it always
+  shows everything outstanding (question for Ben below).
+- **Settings** (`/settings`): generic settings shell; the only panel today
+  is Orders → Suppliers (name, cadence, account number). Gated by a new
+  `settings:manage` permission (managers get it by default; grantable
+  per-user via Clerk metadata `permissions`). Future modules add their own
+  panels to the shell — nothing supplier-specific leaks outside the panel
+  component (§10a).
+- **Export XLSX** (`/api/export/outstanding`): one worksheet per supplier
+  (plus Unassigned), columns Title / ISBN / Quantity / Account number.
+- **Status timeline control** on the detail page: click a stage to move
+  the order. Stage 2 is a **branch** — Ordered and In store are
+  mutually-exclusive alternatives, per Ben's constraint — with Can't get /
+  Cancelled as off-path outcomes. Every change is recorded (who + when)
+  in the Status Log and shown as history.
+- **Order detail**: cover photo from the ISBN (OpenLibrary covers), with a
+  visible "double-check the ISBN" warning when nothing resolves; team
+  member picker (defaults to the logged-in user, can be set to a
+  colleague); price/quantity/supplier facts.
+- **Form fixes**: pre-order checkbox now comes *before* the publication
+  date it reveals; price + quantity fields; team member + supplier
+  selects.
+- **Customer profiles** (`/customers/[id]`): contact details + order
+  history reusing the shared orders table.
+- **Search/lookup**: queue search already matched customer and book names;
+  ISBN lookup now passes `country=GB` so Google Books prefers UK titles.
+- **Buttons**: primary/secondary/danger now share identical geometry
+  (padding, border, type size) — only fill differs.
+
+### V3 defaults awaiting Ben's confirmation
+
+1. **To Order scope** — always the full outstanding queue, no daily
+   cutoff/reset. Say the word if the end-of-day ritual should return.
+2. **Export scope** — not-yet-ordered only (it's the "send to supplier"
+   file). Including ordered-but-not-arrived would need an extra state or
+   the Estimated Lead Time field.
+3. **Supplier vs publisher** — the spec uses both words; V3 treats them as
+   one list (the party you order from, e.g. Gardners *or* Penguin direct),
+   stored in the Publisher field and managed in Settings. If "publisher of
+   the book" and "supplier you order it via" need to be separate fields,
+   that's a schema addition to flag now.
+4. **Timeline shape** — currently Needs ordering → (Ordered | In store) →
+   Ready for collection → Collected, with Can't get/Cancelled off-path.
+   Confirm this matches the real workflow.
+5. **"Paid Online"** — keep or collapse (see §Status above).
 
 ### Team Member — behavioural change (spec §6, option b)
 

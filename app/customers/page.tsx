@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Customer } from "@/lib/types";
 import PageHeader from "@/components/PageHeader";
 import { Avatar } from "@/components/chips";
 
 export default function CustomersPage() {
+  const router = useRouter();
   const [customers, setCustomers] = useState<Customer[] | null>(null);
   const [q, setQ] = useState("");
 
@@ -61,7 +63,11 @@ export default function CustomersPage() {
             </thead>
             <tbody>
               {filtered.map((c) => (
-                <tr key={c.id} className="border-b border-cream-2 bg-white">
+                <tr
+                  key={c.id}
+                  onClick={() => router.push(`/customers/${c.id}`)}
+                  className="cursor-pointer border-b border-cream-2 bg-white hover:bg-shell/60"
+                >
                   <td className="py-3.5 pl-5 pr-4 sm:pl-8">
                     <div className="flex items-center gap-[11px]">
                       <Avatar name={c.name} />

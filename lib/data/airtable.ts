@@ -1,18 +1,47 @@
-import type { Customer, CustomerInput, Order, OrderInput, Location } from "@/lib/types";
+import type {
+  Customer,
+  CustomerInput,
+  Order,
+  OrderInput,
+  Location,
+  StatusLogEntry,
+  Supplier,
+  SupplierInput,
+} from "@/lib/types";
 import { DEFAULT_LOCATION } from "@/lib/config";
 import type { DataSource } from "./source";
 
 // Airtable REST implementation. Uses the REST API directly (no SDK — smaller,
 // and full control over typecast behaviour).
 //
-// NOTE ON SCHEMA: the "Location" and "Notes" fields do not exist in the live
-// base yet — see README §Schema migration. Until the migration is applied,
-// set AIRTABLE_HAS_NEW_FIELDS=false and this implementation will neither read
-// nor write them (Location falls back to "Simply Books" on read).
+// NOTE ON SCHEMA: the V1 fields ("Location", "Notes") and V3 additions
+// ("Publisher", "Price", "Quantity", "Status Log", and the "Suppliers"
+// table) do not exist in the live base yet — see README §Schema migration.
+// Until the migration is applied, set AIRTABLE_HAS_NEW_FIELDS=false and this
+// implementation will neither read nor write them (sensible fallbacks on
+// read; suppliers come back empty).
 
 const API = "https://api.airtable.com/v0";
 const ORDERS_TABLE = "tbl7kpDpf0XSrdtIS";
 const CUSTOMERS_TABLE = "tbljs0vrDw7rgMofN";
+// Created by the V3 migration; referenced by name until it exists.
+const SUPPLIERS_TABLE = "Suppliers";
+
+// "Status Log" is a long-text field of one line per change: ISO|name|status
+function parseStatusLog(text: string): StatusLogEntry[] {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const [at, by, ...rest] = l.split("|");
+      return { at, by, status: rest.join("|") };
+    })
+    .filter((e) => e.at && e.status);
+}
+
+export const serializeStatusLog = (log: StatusLogEntry[]) =>
+  log.map((e) => [e.at, e.by, e.status].join("|")).join("\n");
 
 function env(name: string): string {
   const v = process.env[name];
@@ -71,6 +100,10 @@ function toOrder(r: any): Order {
     deliveryMethod: f["Delivery Method"] ?? "",
     location: (f["Location"] as Location) ?? DEFAULT_LOCATION,
     notes: f["Notes"] ?? "",
+    publisher: f["Publisher"] ?? "",
+    price: typeof f["Price"] === "number" ? f["Price"] : null,
+    quantity: typeof f["Quantity"] === "number" && f["Quantity"] > 0 ? f["Quantity"] : 1,
+    statusLog: parseStatusLog(f["Status Log"] ?? ""),
     orderDate: f["Order Date"] ?? r.createdTime,
     lastModified: f["Last Modified"] ?? r.createdTime,
   };
@@ -94,7 +127,29 @@ function fromOrder(input: Partial<OrderInput>): Record<string, unknown> {
   if (hasNewFields()) {
     if (input.location !== undefined) f["Location"] = input.location;
     if (input.notes !== undefined) f["Notes"] = input.notes;
+    if (input.publisher !== undefined) f["Publisher"] = input.publisher;
+    if (input.price !== undefined) f["Price"] = input.price;
+    if (input.quantity !== undefined) f["Quantity"] = input.quantity;
+    if (input.statusLog !== undefined) f["Status Log"] = serializeStatusLog(input.statusLog);
   }
+  return f;
+}
+
+function toSupplier(r: any): Supplier {
+  const f = r.fields ?? {};
+  return {
+    id: r.id,
+    name: f["Name"] ?? "",
+    cadence: f["Cadence"] ?? "",
+    accountNumber: f["Account Number"] ?? "",
+  };
+}
+
+function fromSupplier(input: Partial<SupplierInput>): Record<string, unknown> {
+  const f: Record<string, unknown> = {};
+  if (input.name !== undefined) f["Name"] = input.name;
+  if (input.cadence !== undefined) f["Cadence"] = input.cadence;
+  if (input.accountNumber !== undefined) f["Account Number"] = input.accountNumber;
   return f;
 }
 
@@ -175,5 +230,28 @@ export const airtableDataSource: DataSource = {
       body: JSON.stringify({ fields: fromCustomer(input) }),
     });
     return toCustomer(data);
+  },
+
+  async listSuppliers() {
+    if (!hasNewFields()) return [];
+    const records = await atList(SUPPLIERS_TABLE);
+    return records.map(toSupplier);
+  },
+  async createSupplier(input) {
+    const data = await at(SUPPLIERS_TABLE, {
+      method: "POST",
+      body: JSON.stringify({ fields: fromSupplier(input) }),
+    });
+    return toSupplier(data);
+  },
+  async updateSupplier(id, input) {
+    const data = await at(`${SUPPLIERS_TABLE}/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ fields: fromSupplier(input) }),
+    });
+    return toSupplier(data);
+  },
+  async deleteSupplier(id) {
+    await at(`${SUPPLIERS_TABLE}/${id}`, { method: "DELETE" });
   },
 };

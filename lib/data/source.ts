@@ -1,4 +1,4 @@
-import type { Customer, CustomerInput, Order, OrderInput } from "@/lib/types";
+import type { Customer, CustomerInput, Order, OrderInput, Supplier, SupplierInput } from "@/lib/types";
 
 // The seam for the future Postgres migration (spec §7): every page and API
 // route goes through this interface. Swapping the store means writing one new
@@ -14,4 +14,10 @@ export interface DataSource {
   getCustomer(id: string): Promise<Customer | null>;
   createCustomer(input: CustomerInput): Promise<Customer>;
   updateCustomer(id: string, input: Partial<CustomerInput>): Promise<Customer>;
+
+  // V3 §3: supplier settings (cadence + account number)
+  listSuppliers(): Promise<Supplier[]>;
+  createSupplier(input: SupplierInput): Promise<Supplier>;
+  updateSupplier(id: string, input: Partial<SupplierInput>): Promise<Supplier>;
+  deleteSupplier(id: string): Promise<void>;
 }

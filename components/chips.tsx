@@ -1,4 +1,4 @@
-import { canonicalStatus, PAID_COLORS, VENUES, venueKeyOf, initialsOf } from "@/lib/config";
+import { canonicalStatus, paidDisplay, VENUES, venueKeyOf, initialsOf } from "@/lib/config";
 import type { Location } from "@/lib/types";
 
 /** Status chip: dot + tinted pill in the canonical status colour. */
@@ -16,13 +16,13 @@ export function StatusChip({ raw }: { raw: string }) {
 }
 
 export function PaidChip({ paid }: { paid: string }) {
-  const c = PAID_COLORS[paid] ?? "#8C857C";
+  const { label, color } = paidDisplay(paid);
   return (
     <span
       className="inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-[3px] text-xs font-semibold"
-      style={{ color: c, background: `${c}14`, borderColor: `${c}33` }}
+      style={{ color, background: `${color}14`, borderColor: `${color}33` }}
     >
-      {paid || "—"}
+      {label}
     </span>
   );
 }

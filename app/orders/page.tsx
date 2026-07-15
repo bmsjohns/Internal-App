@@ -3,17 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import type { Order } from "@/lib/types";
 import { canonicalStatus, CANONICAL_STATUSES, relTime, VENUES, venueKeyOf } from "@/lib/config";
 import { useVenue } from "@/components/VenueContext";
 import PageHeader, { btnGhost, btnPrimary } from "@/components/PageHeader";
-import { PaidChip, StatusChip } from "@/components/chips";
+import OrdersTable from "@/components/OrdersTable";
 
 const FILTER_KEYS = ["all", "needs-ordering", "ready", "ordered", "in-store", "collected"];
 
 export default function OrdersQueue() {
-  const router = useRouter();
   const { venue } = useVenue();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
@@ -62,8 +60,8 @@ export default function OrdersQueue() {
         title="Orders"
         actions={
           <>
-            <Link href="/summary" className={btnGhost}>
-              End of day
+            <Link href="/to-order" className={btnGhost}>
+              To order
             </Link>
             <Link href="/orders/new" className={btnPrimary}>
               + New order
@@ -111,63 +109,7 @@ export default function OrdersQueue() {
         {error && <p className="p-8 text-coral">Couldn’t load orders: {error}</p>}
         {!orders && !error && <p className="p-8 text-stone">Loading…</p>}
 
-        {orders && filtered.length > 0 && (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="eyebrow text-left text-stone">
-                <th className="sticky top-0 bg-cream py-3 pl-5 pr-4 font-semibold sm:pl-8">Book</th>
-                <th className="sticky top-0 hidden bg-cream px-4 py-3 font-semibold md:table-cell">Customer</th>
-                <th className="sticky top-0 bg-cream px-4 py-3 font-semibold">Status</th>
-                <th className="sticky top-0 hidden bg-cream px-4 py-3 font-semibold sm:table-cell">Paid</th>
-                <th className="sticky top-0 hidden bg-cream px-4 py-3 font-semibold lg:table-cell">Delivery</th>
-                <th className="sticky top-0 hidden bg-cream py-3 pl-4 pr-8 text-right font-semibold md:table-cell">Added</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((o) => (
-                <tr
-                  key={o.id}
-                  onClick={() => router.push(`/orders/${o.id}`)}
-                  className="cursor-pointer border-b border-cream-2 bg-white hover:bg-shell/60"
-                >
-                  <td
-                    className="py-[13px] pl-5 pr-4 sm:pl-8"
-                    style={{ borderLeft: `3px solid ${VENUES[venueKeyOf(o.location)].color}` }}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      {o.isPreorder && (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="shrink-0 text-coral">
-                          <title>Pre-order</title>
-                          <circle cx="12" cy="12" r="9" />
-                          <path d="M12 7v5l3 2" />
-                        </svg>
-                      )}
-                      <span className="font-semibold text-ink">{o.bookTitle}</span>
-                    </div>
-                    <div className="mt-0.5 text-[12.5px] text-stone">
-                      {o.author}
-                      {o.isbn && ` · ${o.isbn}`}
-                    </div>
-                  </td>
-                  <td className="hidden whitespace-nowrap px-4 py-[13px] text-charcoal md:table-cell">
-                    {o.customerName ?? "—"}
-                    {o.customerPhone && <div className="text-xs text-stone">{o.customerPhone}</div>}
-                  </td>
-                  <td className="px-4 py-[13px]">
-                    <StatusChip raw={o.status} />
-                  </td>
-                  <td className="hidden px-4 py-[13px] sm:table-cell">
-                    <PaidChip paid={o.paid} />
-                  </td>
-                  <td className="hidden px-4 py-[13px] text-charcoal lg:table-cell">{o.deliveryMethod || "—"}</td>
-                  <td className="hidden whitespace-nowrap py-[13px] pl-4 pr-8 text-right text-[13px] text-stone md:table-cell">
-                    {relTime(o.orderDate)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        {orders && filtered.length > 0 && <OrdersTable orders={filtered} />}
 
         {orders && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center px-5 py-20 text-center">

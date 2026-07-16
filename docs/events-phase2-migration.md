@@ -121,13 +121,15 @@ and Phase 5 should build on the new table, not the bolt-on pair.
 5. Apply the same changes to the live base, set
    `EVENTS_AIRTABLE_HAS_PHASE2=true` in production.
 
-## 7. Access model shipped with Phase 2 (for Ben to confirm)
+## 7. Access model — CONFIRMED by Ben (16 Jul 2026)
 
 - `events:view` / `events:edit` — the Events module (list/detail/venues/
-  hosts). Granted per-person in Clerk `publicMetadata.permissions`, same
-  mechanism as pitching. **Open question for Ben** (spec §1): keep it an
-  explicit grant like pitching, or default it on for the whole team? It's a
-  one-line change in `lib/auth.ts` either way.
+  hosts) is **permission-only**: granted per-person in Clerk
+  `publicMetadata.permissions`, same mechanism as pitching. Nobody gets it
+  by default. (Same override caveat as pitching: an explicit `permissions`
+  list replaces role defaults, so include `callsheet:view` — and
+  `settings:manage` for managers — when granting, e.g.
+  `["settings:manage", "callsheet:view", "events:view", "events:edit"]`.)
 - `callsheet:view` — the day-of tier (spec §6.2): granted to **every role
   by default**, opens ONLY `/callsheet/<event>` for events the person is
   staffed on (events-module users can open any). No financials, no editing,

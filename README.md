@@ -319,9 +319,9 @@ locations; see `lib/events.ts`).
   survives a reload — after connectivity drops. This is the app's one
   deliberate offline surface; nothing else registers the SW.
 
-**Access tiers** (lib/auth.ts): `events:view` / `events:edit` granted
-per-person in Clerk like pitching (open question: default on for whole
-team? — see docs/events-phase2-migration.md §7), and `callsheet:view`
+**Access tiers** (lib/auth.ts) — **confirmed by Ben 16 Jul 2026**: the wider
+Events module (`events:view` / `events:edit`) is permission-only, granted
+per-person in Clerk like pitching; `callsheet:view` is
 granted to **all roles by default** — it opens only the call sheet page,
 and only for events the person is staffed on (events-module users can open
 any). Staff identity on roles/schedule = Clerk user id (mock slugs in dev),

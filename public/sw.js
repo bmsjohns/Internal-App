@@ -1,12 +1,15 @@
 // Offline support for the day-of call sheet (Events Phase 2 spec §6.3).
 // Deliberately narrow: this app has NO general offline requirement — only
-// /callsheet/* must survive losing signal backstage. Strategy:
-//   - call sheet pages: network-first, fall back to the cached copy
-//   - static assets (hashed) and brand images: cache-first
-// Data itself is also snapshotted to localStorage by the page, so a cached
-// shell + cached data keeps working through the whole event.
-const PAGES = "ob-callsheet-pages-v1";
-const STATIC = "ob-static-v1";
+// /callsheet/* must survive losing signal backstage.
+//
+// Everything is network-first with a cache fallback — including static
+// assets. Cache-first would be marginally faster for production's hashed
+// chunks, but next dev serves UNhashed chunk URLs whose content changes on
+// every recompile, and a cache-first SW then pins the whole app to stale
+// JS/CSS (learned the hard way). Network-first behaves correctly in both:
+// online you always get the current build, offline you get the last good one.
+const PAGES = "ob-callsheet-pages-v2";
+const STATIC = "ob-static-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -30,15 +33,6 @@ async function networkFirst(request, cacheName) {
     if (cached) return cached;
     throw new Error("offline and not cached");
   }
-}
-
-async function cacheFirst(request) {
-  const cache = await caches.open(STATIC);
-  const cached = await cache.match(request);
-  if (cached) return cached;
-  const fresh = await fetch(request);
-  if (fresh.ok) cache.put(request, fresh.clone());
-  return fresh;
 }
 
 // First-visit priming: the SW only intercepts navigations AFTER it's
@@ -66,6 +60,6 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate" && url.pathname.startsWith("/callsheet/")) {
     event.respondWith(networkFirst(request, PAGES));
   } else if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/assets/")) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(networkFirst(request, STATIC));
   }
 });

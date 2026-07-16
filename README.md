@@ -1,9 +1,9 @@
-# Order Book — Customer Orders module
+# Order Book — internal ops platform
 
-Phase 1 of the internal ops platform for **Simply Books** (Bramhall) and
-**Prologue Books** (Weir Mill, Stockport). Replaces the Airtable UI for the
-"Customer Orders" base. Next.js 15 (App Router) · Clerk · Airtable · Tailwind 4,
-deployed on Vercel.
+Internal ops platform for **Simply Books** (Bramhall) and **Prologue Books**
+(Weir Mill, Stockport). Modules so far: **Customer Orders** (V3) and **Events
+Phase 1: Pitching** (see §Events below). Next.js 15 (App Router) · Clerk ·
+Airtable · Tailwind 4, deployed on Vercel.
 
 ## Running locally
 
@@ -211,6 +211,71 @@ check before any public deploy. Pigeon mascot + P-mark assets live in
 - **End-of-day summary groups duplicate ISBNs** into one row with quantity,
   and has a venue toggle + date picker (yesterday's list on a busy morning).
 - **Dev/mock data source** — doubles as the safe-sandbox requirement.
+
+## Events module — Phase 1: Pitching
+
+Built from `events-phase1-pitching-spec.md` (16 Jul 2026). The pipeline of
+proposed author/book events, before any become confirmed bookings. Separate
+Airtable base (`apphUDuZ5u7NCisay`, table `Event Pitching`), so it has its
+own data seam: `lib/data/events.ts` (interface `events-source.ts`, Airtable
+impl `events-airtable.ts`, mock `events-mock.ts`) — same `DATA_SOURCE`
+switch, same "mock in dev, live base never touched" rule.
+
+**Screens:** `/pitching` — kanban board (columns = canonical stages) and a
+sortable list view as a toggle over the same data; pitch detail; edit; new.
+Cards move by **drag-and-drop AND a per-card stage dropdown** (spec offered a
+choice — both were cheap; the dropdown also covers touch devices, where HTML5
+DnD doesn't fire).
+
+**Access** is deliberately narrow (spec §1): `pitching:view` / `pitching:edit`
+/ `pitching:delete` are granted per-person via Clerk `publicMetadata`
+`permissions`, NOT by role. Nobody gets them by default. ⚠️ Override
+semantics: an explicit `permissions` list replaces role defaults, so a
+manager in the pitching group needs
+`{ "permissions": ["settings:manage", "pitching:view", "pitching:edit", "pitching:delete"] }`.
+**Ben: name the group** and set that in the Clerk dashboard per user.
+
+**Status model** (lib/pitching.ts): the live table's 13 Status options fold
+into 8 board columns; writes only ever use existing Airtable option strings
+(`writeAs`), raw value stays visible on the detail page. Judgement calls to
+confirm:
+- "Opportunity from London" (81 of 123 records!) is a *source*, not a stage → shown as **Wishlist**
+- "Doing Events" → shown as **Won**
+- "Identified" → **Wishlist**; "To Pitch - Elinor Creating" and "Pitch To Review" → **Preparing pitch**
+
+A real clean-up of the option list itself (like the Orders status migration)
+is a schema change for Ben to approve separately.
+
+**Publisher/Imprint (Phase 0 dependency):** the spec says the
+Publisher→Imprint schema fix (`events-phase0-publisher-imprint-spec.md`)
+should land first, but that spec file wasn't provided and the live base still
+has Publisher as a direct link on pitches. The app is built the Phase-0-shaped
+way regardless: **it writes Imprint only; Publisher displays read-only**,
+derived from the imprint (falling back to the legacy direct link on old
+records). When Phase 0 lands in Airtable nothing here should need to change.
+Note: the Imprints table's primary field is currently named "Publisher Name" —
+worth renaming to "Imprint Name" as part of Phase 0.
+
+**Pending schema addition (NOT applied — same sign-off rule as Orders):**
+- `Location` single select (`Simply Books` / `Prologue`) on Event Pitching,
+  same pattern as Orders. Until it exists, leave `EVENTS_AIRTABLE_HAS_LOCATION`
+  unset and the field is neither read nor written (the "Shop" control in the
+  UI works in mock mode). Proposed config: singleSelect, options exactly
+  `Simply Books`, `Prologue`, no default.
+
+**Env:** reuses `AIRTABLE_API_KEY` (token must be granted access to the
+Events base too, scopes `data.records:read/write`); optional
+`EVENTS_AIRTABLE_BASE_ID` override; `EVENTS_AIRTABLE_HAS_LOCATION=true` once
+the Location field exists.
+
+**Known limits (by design, Phase 1):** venues are select-only — a missing
+venue is added in Airtable directly until Phase 2's venue management; pitch
+decks upload via Airtable's content API (5MB/file cap); the Lead picker is a
+hardcoded collaborator list in `lib/pitching.ts` (Ben/Elinor/Charlotte —
+Airtable doesn't expose base collaborators over REST); `Proposed Dates` and
+`Estimated Audience Size` stay free text (flagged in spec, out of scope);
+the table's stray `Minimum order` field isn't surfaced (not in the spec's
+field list — flag if wanted).
 
 ## Open questions for Ben
 

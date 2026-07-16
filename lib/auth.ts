@@ -16,6 +16,15 @@ const ROLE_PERMISSIONS: Record<Role, string[]> = {
   manager: ["settings:manage"],
 };
 
+// Events Phase 1: pitching is deliberately NOT granted by any role — access
+// is restricted to a small group Ben names, via explicit `permissions` in
+// Clerk publicMetadata (same add/remove-in-dashboard mechanism as the rest
+// of the app). NOTE the override semantics above: listing `permissions` for
+// a manager replaces their defaults, so include "settings:manage" too, e.g.
+//   { "role": "manager", "permissions": ["settings:manage", "pitching:view",
+//     "pitching:edit", "pitching:delete"] }
+export const PITCHING_PERMISSIONS = ["pitching:view", "pitching:edit", "pitching:delete"];
+
 /**
  * Resolve the current user, from Clerk when configured.
  *
@@ -56,7 +65,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       name: process.env.DEV_AUTH_NAME ?? "Ben",
       role,
       managerLocations: role === "manager" ? "all" : [],
-      permissions: ROLE_PERMISSIONS[role],
+      // Dev user gets pitching access so the module is reachable locally.
+      permissions: [...ROLE_PERMISSIONS[role], ...PITCHING_PERMISSIONS],
     };
   }
   return null;

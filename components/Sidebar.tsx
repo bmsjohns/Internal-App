@@ -18,6 +18,13 @@ const MODULES = [
   { href: "/to-order", label: "To order", icon: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>' },
 ];
 
+// Events Phase 1 — only shown to the small pitching group (pitching:view).
+const PITCHING_MODULE = {
+  href: "/pitching",
+  label: "Pitching",
+  icon: '<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/>',
+};
+
 const SETTINGS_ICON = '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/>';
 
 const COMING_SOON = [
@@ -44,6 +51,8 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
   }, [pathname]);
 
   const needsCount = orders.filter((o) => canonicalStatus(o.status).key === "needs-ordering").length;
+  const canPitch = !!user?.permissions.includes("pitching:view");
+  const modules = canPitch ? [...MODULES, PITCHING_MODULE] : MODULES;
   const venueOptions: { key: VenueSelection; label: string; dot: string; count: number }[] = [
     { key: "all", label: "All venues", dot: "#8C857C", count: orders.length },
     { key: "simply", label: "Simply Books", dot: VENUES.simply.color, count: orders.filter((o) => o.location === "Simply Books").length },
@@ -57,8 +66,8 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
       {/* Mobile top bar */}
       <div className="fixed inset-x-0 top-0 z-20 flex items-center gap-3 border-b border-cream-2 bg-white px-4 py-2.5 lg:hidden">
         <Image src="/assets/p-mark-red.png" alt="" width={22} height={29} />
-        <nav className="flex gap-1">
-          {MODULES.map((m) => (
+        <nav className="flex gap-1 overflow-x-auto">
+          {modules.map((m) => (
             <Link
               key={m.href}
               href={m.href}
@@ -118,7 +127,7 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
 
         <nav className="flex flex-1 flex-col gap-0.5 px-4">
           <div className={label}>Modules</div>
-          {MODULES.map((m) => {
+          {modules.map((m) => {
             const active = pathname.startsWith(m.href);
             return (
               <Link

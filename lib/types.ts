@@ -65,6 +65,68 @@ export interface Supplier {
 
 export type SupplierInput = Omit<Supplier, "id">;
 
+// ---------------------------------------------------------------------------
+// Events module, Phase 1: Pitching (separate Airtable base — see lib/data/events*)
+// ---------------------------------------------------------------------------
+
+export interface PitchAttachment {
+  id: string;
+  filename: string;
+  url: string;
+  size: number;
+}
+
+export interface Pitch {
+  id: string;
+  authorName: string;
+  bookTitle: string;
+  isbn: string;
+  /** Legacy direct Publisher link — read-only in the UI; Phase 0 will make it a lookup. */
+  publisherIds: string[];
+  publisherNames: string[];
+  /** The primary link point going forward: pitch → Imprint. */
+  imprintIds: string[];
+  imprintNames: string[];
+  publicationDate: string | null;
+  status: string; // raw Airtable option; canonical stage derived via lib/pitching
+  priority: string;
+  initialHighPriority: boolean;
+  leadName: string;
+  leadEmail: string;
+  publicist: string;
+  publicistEmail: string;
+  pitchDeck: PitchAttachment[];
+  proposedVenueIds: string[];
+  proposedVenueNames: string[];
+  proposedDates: string; // free text in the base — flagged, out of scope to fix
+  estimatedAudienceSize: string; // also free text — same flag
+  pitchingNotes: string;
+  opportunityNotes: string; // Airtable rich text (markdown)
+  rating: number | null;
+  /** New field, not in the live base yet — guarded by EVENTS_AIRTABLE_HAS_LOCATION. */
+  location: Location | null;
+  createdAt: string;
+}
+
+export type PitchInput = Omit<
+  Pitch,
+  "id" | "createdAt" | "publisherIds" | "publisherNames" | "imprintNames" | "proposedVenueNames" | "leadName" | "pitchDeck"
+>;
+
+/** Venue option for the Proposed Venue(s) picker — read-only in Phase 1 (§6). */
+export interface EventVenue {
+  id: string;
+  name: string;
+  locations: string[]; // Venues.Location multi-select (Bramhall/Stockport/Manchester)
+}
+
+/** Imprint option; publisherName resolved from the Imprints→Publishers link. */
+export interface Imprint {
+  id: string;
+  name: string;
+  publisherName: string;
+}
+
 export type Role = "staff" | "manager";
 
 export interface SessionUser {

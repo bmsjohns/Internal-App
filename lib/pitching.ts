@@ -21,64 +21,77 @@ export interface PitchStage {
   key: string;
   label: string;
   color: string;
+  /** One-line column subtitle on the board (Claude Design "Order Book.dc.html"). */
+  hint: string;
   writeAs: string; // exact Airtable select option written on save
   raw: string[]; // Airtable options that display as this stage
 }
 
+// Colours follow the design file's pitching palette (stone → ochre → moss →
+// rust for the pipeline, fog for terminal states), extended to cover the 8
+// canonical stages the real data needs (the design mocked 5).
 export const PITCH_STAGES: PitchStage[] = [
   {
     key: "wishlist",
     label: "Wishlist",
-    color: "#2B4C6F",
+    color: "#8C857C",
+    hint: "Idea captured",
     writeAs: "Wishlist",
     raw: ["Wishlist", "Identified", "Opportunity from London"],
   },
   {
     key: "to-review",
     label: "To review",
-    color: "#B0812F",
+    color: "#2B4C6F",
+    hint: "Needs a decision & a lead",
     writeAs: "To Review/Allocate",
     raw: ["To Review/Allocate"],
   },
   {
     key: "pitch-prep",
     label: "Preparing pitch",
-    color: "#8C857C",
+    color: "#B0812F",
+    hint: "Deck in progress",
     writeAs: "To Pitch",
     raw: ["To Pitch", "To Pitch - Elinor Creating", "Pitch To Review"],
   },
   {
     key: "pitch-sent",
     label: "Pitch sent",
-    color: "#AD3B28",
+    color: "#DA4F4A",
+    hint: "Waiting to hear",
     writeAs: "Pitch Sent",
     raw: ["Pitch Sent"],
   },
   {
     key: "in-discussions",
     label: "In discussions",
-    color: "#3A322C",
+    color: "#5F7355",
+    hint: "Talking terms",
     writeAs: "In Discussions",
     raw: ["In Discussions"],
   },
   {
     key: "won",
     label: "Won",
-    color: "#5F7355",
+    color: "#AD3B28",
+    hint: "Becomes a booking → Phase 2",
     writeAs: "Closed - Won",
     raw: ["Closed - Won", "Doing Events"],
   },
   {
     key: "lost",
     label: "Lost",
-    color: "#DA4F4A",
+    color: "#B8B0A6",
+    hint: "Not proceeding",
     writeAs: "Closed - Lost",
     raw: ["Closed - Lost"],
   },
   {
     key: "archive",
     label: "Archive",
-    color: "#B8B0A6",
+    color: "#A9A196",
+    hint: "Parked for now",
     writeAs: "Archive",
     raw: ["Archive"],
   },
@@ -95,11 +108,13 @@ export function pitchStage(raw: string): PitchStage {
 // Priority options in the live base are clean — used verbatim.
 export const PITCH_PRIORITIES = ["Low", "Medium", "High", "Mission Critical"] as const;
 
+// Priority colours per the design file (low stone / medium ochre / high rust);
+// Mission Critical exists only in the live base — deep rust, a notch past High.
 export const PRIORITY_COLORS: Record<string, string> = {
-  Low: "#5F7355",
+  Low: "#8C857C",
   Medium: "#B0812F",
-  High: "#DA4F4A",
-  "Mission Critical": "#1A1714",
+  High: "#AD3B28",
+  "Mission Critical": "#8B2D1E",
 };
 
 // Lead is an Airtable collaborator field, and base collaborators aren't

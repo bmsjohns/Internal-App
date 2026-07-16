@@ -4,13 +4,23 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Pitch } from "@/lib/types";
 import { PITCH_STAGES, pitchStage, type PitchStage } from "@/lib/pitching";
-import { PriorityChip, RatingStars } from "./chips";
+import { LeadDot, PriorityChip, RatingStars } from "./chips";
+
+const GRIP = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" />
+    <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
+    <circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
+  </svg>
+);
 
 /**
- * Kanban board (§3.1): columns are canonical stages, cards move by
- * drag-and-drop (desktop) or the per-card stage dropdown (works everywhere,
- * incl. touch — native HTML5 DnD doesn't fire on touch screens). Both write
- * the stage's `writeAs` — an existing Airtable option.
+ * Kanban board (§3.1), laid out per the Claude Design file: white columns
+ * with a stage-coloured top border, hint line under each column label, and
+ * cream cards (priority pill + grip, display-face title, publisher line,
+ * stars + lead footer). Cards move by drag-and-drop; the same status write
+ * is available from the stage select on the pitch's edit screen, which
+ * covers touch devices. Both only ever write existing Airtable options.
  */
 export default function PitchBoard({
   pitches,
@@ -34,7 +44,7 @@ export default function PitchBoard({
   }
 
   return (
-    <div className="flex h-full gap-3 overflow-x-auto px-5 pb-6 pt-5 sm:px-8">
+    <div className="flex items-start gap-[18px] overflow-x-auto px-5 pb-8 pt-[22px] sm:px-8">
       {PITCH_STAGES.map((stage) => {
         const cards = byStage.get(stage.key)!;
         return (
@@ -46,63 +56,54 @@ export default function PitchBoard({
             }}
             onDragLeave={() => setOverKey((k) => (k === stage.key ? null : k))}
             onDrop={() => drop(stage)}
-            className={`flex w-[248px] shrink-0 flex-col rounded-lg border transition-colors ${
-              overKey === stage.key && dragId ? "border-rust bg-shell/60" : "border-cream-2 bg-white/60"
+            className={`flex w-[288px] shrink-0 flex-col rounded-lg border bg-white transition-colors ${
+              overKey === stage.key && dragId ? "border-rust" : "border-cream-2"
             }`}
+            style={{ borderTop: `3px solid ${stage.color}` }}
           >
-            <header className="flex items-center gap-2 px-3 pb-2 pt-3">
-              <span className="h-[9px] w-[9px] rounded-full" style={{ background: stage.color }} />
-              <span className="text-[12.5px] font-semibold text-charcoal">{stage.label}</span>
-              <span className="ml-auto text-[11px] tabular-nums text-stone">{cards.length}</span>
+            <header className="border-b border-cream-2 px-4 pb-[11px] pt-[13px]">
+              <div className="flex items-center justify-between">
+                <span className="font-display text-base text-ink">{stage.label}</span>
+                <span className="rounded-full bg-cream px-[9px] py-px text-xs font-semibold tabular-nums text-stone">
+                  {cards.length}
+                </span>
+              </div>
+              <div className="mt-0.5 text-[11.5px] text-stone">{stage.hint}</div>
             </header>
-            <div className="flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
-              {cards.map((p) => (
-                <article
-                  key={p.id}
-                  draggable
-                  onDragStart={() => setDragId(p.id)}
-                  onDragEnd={() => {
-                    setDragId(null);
-                    setOverKey(null);
-                  }}
-                  onClick={() => router.push(`/pitching/${p.id}`)}
-                  title={p.status !== stage.writeAs ? `Airtable status: ${p.status}` : undefined}
-                  className={`cursor-pointer rounded-md border border-cream-2 bg-white p-3 shadow-[0_1px_2px_rgba(26,23,20,0.05)] transition-opacity hover:border-stone ${
-                    dragId === p.id ? "opacity-40" : ""
-                  }`}
-                >
-                  <div className="text-[13.5px] font-semibold leading-snug text-ink">{p.authorName}</div>
-                  {p.bookTitle && <div className="mt-0.5 line-clamp-2 text-[12.5px] text-charcoal">{p.bookTitle}</div>}
-                  {(p.imprintNames.length > 0 || p.publisherNames.length > 0) && (
-                    <div className="mt-1 truncate text-[11.5px] text-stone">
-                      {p.imprintNames[0] ?? p.publisherNames[0]}
-                      {p.imprintNames[0] && p.publisherNames[0] && p.imprintNames[0] !== p.publisherNames[0] && (
-                        <span> · {p.publisherNames[0]}</span>
-                      )}
-                    </div>
-                  )}
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <PriorityChip priority={p.priority} />
-                    <RatingStars rating={p.rating} size={13} />
-                  </div>
-                  <select
-                    value={stage.key}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => {
-                      const next = PITCH_STAGES.find((s) => s.key === e.target.value);
-                      if (next) onMove(p, next);
+            <div className="flex min-h-14 flex-col gap-2.5 overflow-y-auto p-3">
+              {cards.map((p) => {
+                const title = p.bookTitle || p.authorName;
+                const pubLine =
+                  [p.publisherNames[0], p.imprintNames[0]].filter(Boolean).join(" · ") || "No publisher yet";
+                return (
+                  <article
+                    key={p.id}
+                    draggable
+                    onDragStart={() => setDragId(p.id)}
+                    onDragEnd={() => {
+                      setDragId(null);
+                      setOverKey(null);
                     }}
-                    className="mt-2 w-full cursor-pointer rounded border border-cream-2 bg-cream px-1.5 py-1 text-[11.5px] text-charcoal"
-                    aria-label="Move to stage"
+                    onClick={() => router.push(`/pitching/${p.id}`)}
+                    title={p.status !== stage.writeAs ? `Airtable status: ${p.status}` : undefined}
+                    className={`cursor-pointer rounded-[7px] border border-cream-2 bg-cream px-3.5 py-[13px] transition-opacity hover:bg-shell/60 ${
+                      dragId === p.id ? "opacity-40" : ""
+                    }`}
                   >
-                    {PITCH_STAGES.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </article>
-              ))}
+                    <div className="flex items-start justify-between gap-2">
+                      <PriorityChip priority={p.priority} />
+                      <span className="shrink-0 text-[#C9C1B5]">{GRIP}</span>
+                    </div>
+                    <div className="mt-[9px] font-display text-base leading-[1.15] text-ink">{title}</div>
+                    {p.bookTitle && <div className="mt-0.5 text-[13px] text-charcoal">{p.authorName}</div>}
+                    <div className="mt-2 text-xs text-stone">{pubLine}</div>
+                    <div className="mt-[11px] flex items-center justify-between border-t border-cream-2 pt-2.5">
+                      <RatingStars rating={p.rating} />
+                      <LeadDot name={p.leadName} />
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
         );

@@ -222,10 +222,16 @@ impl `events-airtable.ts`, mock `events-mock.ts`) — same `DATA_SOURCE`
 switch, same "mock in dev, live base never touched" rule.
 
 **Screens:** `/pitching` — kanban board (columns = canonical stages) and a
-sortable list view as a toggle over the same data; pitch detail; edit; new.
-Cards move by **drag-and-drop AND a per-card stage dropdown** (spec offered a
-choice — both were cheap; the dropdown also covers touch devices, where HTML5
-DnD doesn't fire).
+sortable list view as a toggle over the same data; a single combined
+detail/edit screen; a quick-create New pitch screen. Layout follows the
+Claude Design file ("Order Book.dc.html" in project
+`4fc6a73a-3e27-4c9f-bdc0-4ee641e7d062`): stage-coloured column accents with
+hint lines, cream cards (priority pill, display-face title, stars + lead),
+Pipeline/People/Venues rails on the editor, bird-banner quick-create. The
+design mocked a proposed 5-status model and a pre-Phase-0 publisher flag —
+visuals were adopted; the data model follows the spec (real statuses,
+imprint-primary). Cards move by **drag-and-drop** (per the design); on touch,
+the stage select on the editor's Pipeline panel does the same write.
 
 **Access** is deliberately narrow (spec §1): `pitching:view` / `pitching:edit`
 / `pitching:delete` are granted per-person via Clerk `publicMetadata`

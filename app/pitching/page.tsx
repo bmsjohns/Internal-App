@@ -101,6 +101,10 @@ export default function PitchingPage() {
           </Link>
         }
       >
+        <p className="mb-0 mt-1.5 max-w-[560px] text-[13.5px] text-charcoal">
+          Author &amp; book events we’re chasing, before anything’s booked. Move a card along as the
+          conversation develops.
+        </p>
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <div className="flex gap-1" role="tablist" aria-label="View">
             <button role="tab" aria-selected={view === "board"} onClick={() => setView("board")} className={segBtn(view === "board")}>
@@ -111,14 +115,22 @@ export default function PitchingPage() {
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <button onClick={() => setPriority("all")} className={`whitespace-nowrap rounded-full border px-[13px] py-[7px] text-[12.5px] font-semibold ${priority === "all" ? "border-rust bg-rust text-cream" : "border-cream-2 bg-white text-charcoal"}`}>
-              All priorities
-            </button>
-            {PITCH_PRIORITIES.map((p) => (
-              <button key={p} onClick={() => setPriority(p)} className={`whitespace-nowrap rounded-full border px-[13px] py-[7px] text-[12.5px] font-semibold ${priority === p ? "border-rust bg-rust text-cream" : "border-cream-2 bg-white text-charcoal"}`}>
-                {p}
-              </button>
-            ))}
+            {["all", ...PITCH_PRIORITIES].map((p) => {
+              const active = priority === p;
+              const count = p === "all" ? 0 : (pitches ?? []).filter((x) => x.priority === p).length;
+              return (
+                <button
+                  key={p}
+                  onClick={() => setPriority(p)}
+                  className={`whitespace-nowrap rounded-full border px-[13px] py-[7px] text-[12.5px] font-semibold ${
+                    active ? "border-rust bg-rust text-cream" : "border-cream-2 bg-white text-charcoal"
+                  }`}
+                >
+                  {p === "all" ? "All priorities" : p}
+                  {count > 0 && <span className="ml-[5px] tabular-nums opacity-60">{count}</span>}
+                </button>
+              );
+            })}
           </div>
           {view === "list" && (
             <>
@@ -153,8 +165,9 @@ export default function PitchingPage() {
       <div className="flex justify-between border-t border-cream-2 bg-white px-5 py-[11px] text-[12.5px] text-stone sm:px-8">
         <span>
           {filtered.length} pitch{filtered.length === 1 ? "" : "es"}
+          {view === "board" && " · drag between columns to change status"}
         </span>
-        <span>Airtable · Events › Event Pitching</span>
+        <span>Airtable · Events base · Event Pitching</span>
       </div>
     </div>
   );

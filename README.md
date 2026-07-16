@@ -283,6 +283,63 @@ Airtable doesn't expose base collaborators over REST); `Proposed Dates` and
 the table's stray `Minimum order` field isn't surfaced (not in the spec's
 field list — flag if wanted).
 
+## Events module — Phase 2: Events, Venues, Hosts
+
+Built from `events-phase2-events-venues-hosts-spec.md` + the running-order
+design brief (16 Jul 2026), against the same Claude Design file
+("Order Book.dc.html") — with the design's placeholder option lists replaced
+by the real ones pulled from the live base (Event Type, Age Group, venue
+locations; see `lib/events.ts`).
+
+**Screens:**
+- `/events` — list + calendar toggle over the same data; filters for
+  status / venue / event type. Mobile gets stacked cards instead of the table.
+- `/events/[id]` — one screen, five sub-tabs (design brief §2): General,
+  Show details, **Running order** (time-sequenced plan by Pre/During/Post
+  show phase, inline step editing, live "Now / Up next" markers from the
+  device clock), **Staffing** (per-event roles defined within each phase,
+  people assigned per role, gaps called out, roster cards), Book orders
+  (Phase 3 placeholder). Existing events **autosave optimistically**
+  (debounced PATCH, Saved/Retry states); `/events/new` accumulates a draft
+  and POSTs. "Convert to booking" on a won pitch opens
+  `/events/new?fromPitch=<id>` with author/title/ISBN/venue carried over.
+- `/venues`, `/venues/[id]`, `/venues/new` — card grid + CRUD (photo and
+  tech-spec attachments read-only from Airtable).
+- `/hosts`, `/hosts/[id]`, `/hosts/new` — table + CRUD (Team Contact(s) is
+  an Airtable collaborator field → read-only in the app).
+- `/events/[id]/print` — the call sheet as an on-brand printable document
+  (masthead, facts grid, run of show, team roster); "Download PDF" =
+  browser print-to-PDF. Chrome-free route (no sidebar).
+- `/callsheet/[id]` — **Live mode**, the day-of call sheet (spec §6):
+  standalone phone-first page with the event facts, tap-to-call host,
+  live Now/Next banner, run of show, and the whole team's roles. Built for
+  poor signal: data snapshots to `localStorage`, a **service worker**
+  (`public/sw.js`) caches the page shell + static assets on the FIRST load
+  (the page primes its own URL into the cache), so it keeps working — and
+  survives a reload — after connectivity drops. This is the app's one
+  deliberate offline surface; nothing else registers the SW.
+
+**Access tiers** (lib/auth.ts): `events:view` / `events:edit` granted
+per-person in Clerk like pitching (open question: default on for whole
+team? — see docs/events-phase2-migration.md §7), and `callsheet:view`
+granted to **all roles by default** — it opens only the call sheet page,
+and only for events the person is staffed on (events-module users can open
+any). Staff identity on roles/schedule = Clerk user id (mock slugs in dev),
+so "You" highlighting works with no mapping table.
+
+**Schema honesty:** the live Events table has no Status/ISBN/From Pitch
+fields and no roles/schedule tables yet. The full migration plan — new
+fields, `Event Roles` + `Run of Show` tables (structured records,
+deliberately template-ready per spec §6), the confirmed Schools
+Session-1/2 → `Event Sessions` restructure, data-quality flags, and the
+sandbox-first runbook — is in
+[docs/events-phase2-migration.md](docs/events-phase2-migration.md).
+**Nothing in the live base has been changed.** Until Ben signs off and
+`EVENTS_AIRTABLE_HAS_PHASE2=true` is set, live events read as Confirmed and
+the running-order/staffing editors are read-only with a notice (mock mode
+is fully editable). `Date and Time` maps to the app's date + time in
+**Europe/London** both ways, so 7.30pm stays 7.30pm wherever the server runs.
+
 ## Open questions for Ben
 
 1. **One visual language or two?** The app is Prologue-branded overall with

@@ -12,8 +12,8 @@ const devBypass = () =>
 // publicMetadata override these, so e.g. settings:manage can later be given
 // to a non-manager (or taken from a venue manager) without code changes.
 const ROLE_PERMISSIONS: Record<Role, string[]> = {
-  staff: [],
-  manager: ["settings:manage"],
+  staff: ["callsheet:view"],
+  manager: ["settings:manage", "callsheet:view"],
 };
 
 // Events Phase 1: pitching is deliberately NOT granted by any role — access
@@ -24,6 +24,20 @@ const ROLE_PERMISSIONS: Record<Role, string[]> = {
 //   { "role": "manager", "permissions": ["settings:manage", "pitching:view",
 //     "pitching:edit", "pitching:delete"] }
 export const PITCHING_PERMISSIONS = ["pitching:view", "pitching:edit", "pitching:delete"];
+
+// Events Phase 2: three access tiers (spec §1/§6.2).
+//  - events:view / events:edit — the Events module proper (list, detail,
+//    venues, hosts). Granted explicitly like pitching for now; likely a
+//    broader group than pitching since running a live event involves more
+//    people day-to-day. CONFIRM WITH BEN whether this should instead default
+//    on for all staff (README §Events).
+//  - callsheet:view — the day-of tier: ONLY the standalone call sheet page
+//    for events you're staffed on. Deliberately its own, narrower permission
+//    (not a subset check on events:view) and granted to every role by
+//    default, so the whole on-the-day team can open their call sheet without
+//    being let into the rest of the module.
+export const EVENTS_PERMISSIONS = ["events:view", "events:edit"];
+export const CALLSHEET_PERMISSION = "callsheet:view";
 
 /**
  * Resolve the current user, from Clerk when configured.
@@ -65,8 +79,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       name: process.env.DEV_AUTH_NAME ?? "Ben",
       role,
       managerLocations: role === "manager" ? "all" : [],
-      // Dev user gets pitching access so the module is reachable locally.
-      permissions: [...ROLE_PERMISSIONS[role], ...PITCHING_PERMISSIONS],
+      // Dev user gets pitching + events access so the modules are reachable locally.
+      permissions: [...ROLE_PERMISSIONS[role], ...PITCHING_PERMISSIONS, ...EVENTS_PERMISSIONS],
     };
   }
   return null;

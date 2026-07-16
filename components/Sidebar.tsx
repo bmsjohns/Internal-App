@@ -27,8 +27,14 @@ const PITCHING_MODULE = {
 
 const SETTINGS_ICON = '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/>';
 
+// Events Phase 2 — shown to the events group (events:view).
+const EVENTS_MODULES = [
+  { href: "/events", label: "Events", icon: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>' },
+  { href: "/venues", label: "Venues", icon: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>' },
+  { href: "/hosts", label: "Hosts", icon: '<path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/>' },
+];
+
 const COMING_SOON = [
-  { label: "Events", icon: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>' },
   { label: "Schools", icon: '<path d="M3 9l9-5 9 5-9 5z"/><path d="M7 11v5c0 1 5 3 5 3s5-2 5-3v-5"/>' },
 ];
 
@@ -42,6 +48,9 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
   const pathname = usePathname();
   const { venue, setVenue } = useVenue();
   const [orders, setOrders] = useState<Order[]>([]);
+  // Standalone, chrome-free surfaces: the day-of call sheet (its own access
+  // tier + offline shell) and the printable call sheet.
+  const bare = pathname.startsWith("/callsheet") || /^\/events\/[^/]+\/print/.test(pathname);
 
   useEffect(() => {
     fetch("/api/orders")
@@ -52,7 +61,12 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
 
   const needsCount = orders.filter((o) => canonicalStatus(o.status).key === "needs-ordering").length;
   const canPitch = !!user?.permissions.includes("pitching:view");
-  const modules = canPitch ? [...MODULES, PITCHING_MODULE] : MODULES;
+  const canEvents = !!user?.permissions.includes("events:view");
+  const modules = [
+    ...MODULES,
+    ...(canPitch ? [PITCHING_MODULE] : []),
+    ...(canEvents ? EVENTS_MODULES : []),
+  ];
   const venueOptions: { key: VenueSelection; label: string; dot: string; count: number }[] = [
     { key: "all", label: "All venues", dot: "#8C857C", count: orders.length },
     { key: "simply", label: "Simply Books", dot: VENUES.simply.color, count: orders.filter((o) => o.location === "Simply Books").length },
@@ -60,6 +74,8 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
   ];
 
   const label = "eyebrow mx-1 mb-2 text-stone";
+
+  if (bare) return null;
 
   return (
     <>

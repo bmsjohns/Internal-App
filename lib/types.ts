@@ -127,6 +127,124 @@ export interface Imprint {
   publisherName: string;
 }
 
+// ---------------------------------------------------------------------------
+// Events module, Phase 2: Events / Venues / Hosts (+ call sheets)
+// ---------------------------------------------------------------------------
+
+export type EventPhase = "pre" | "during" | "post";
+
+/** A person who can be put on an event — same identity as the Clerk user
+ *  (spec §6.1: one source of truth for "who is this person"). In mock mode
+ *  ids are slugs; with Clerk they are Clerk user ids. */
+export interface StaffRef {
+  id: string;
+  name: string;
+}
+
+/**
+ * One role on one event: phase + role name + assigned people. Stored as
+ * structured records (not a denormalised blob) SPECIFICALLY so a future
+ * "apply role template" feature (spec §6, out of scope this phase) can
+ * insert a set of these programmatically without a redesign.
+ */
+export interface EventRole {
+  id: string;
+  phase: EventPhase;
+  name: string;
+  staff: StaffRef[];
+}
+
+/**
+ * One timed step in the run of show. `leadId` is a StaffRef id, or the
+ * sentinel "host" (the event's host/chair leads that step), or null
+ * (unassigned). Same structured-records rationale as EventRole.
+ */
+export interface ScheduleItem {
+  id: string;
+  time: string; // "HH:MM", 24h — timezone-proof for a same-day schedule
+  phase: EventPhase;
+  title: string;
+  note: string;
+  leadId: string | null;
+}
+
+export interface EventAttachment {
+  id: string;
+  filename: string;
+  url: string;
+  size: number;
+}
+
+export interface ShowEvent {
+  id: string;
+  name: string; // Name/Author — the headline
+  leadTitle: string;
+  isbn: string; // proposed new field — pre-migration always ""
+  date: string; // "YYYY-MM-DD", "" when TBC
+  time: string; // "HH:MM", "" when TBC
+  venueId: string | null;
+  venueName: string;
+  hostId: string | null;
+  hostName: string;
+  types: string[]; // Event Type multi-select (raw Airtable options)
+  ages: string[]; // Age Group multi-select (raw Airtable options)
+  format: string; // Event Format rich text (markdown)
+  status: string; // proposed new single select; canonical set in lib/events
+  fromPitchId: string | null; // proposed new link to Event Pitching
+  roles: EventRole[];
+  schedule: ScheduleItem[];
+  /** Legacy Staffing multi-select (first names) — displayed read-only until
+   *  the roles migration retires it. */
+  legacyStaffing: string[];
+  bookTicket: number | null;
+  ticketOnly: number | null;
+  minOrder: number | null;
+  lumaLink: string;
+  banners: boolean;
+  callSheet: EventAttachment[];
+  callSheetSent: boolean;
+  salesReportSent: boolean;
+  mediaCount: number;
+  notes: string;
+  createdAt: string;
+}
+
+export type ShowEventInput = Omit<
+  ShowEvent,
+  "id" | "createdAt" | "venueName" | "hostName" | "callSheet" | "mediaCount" | "legacyStaffing"
+>;
+
+export interface Venue {
+  id: string;
+  name: string;
+  capacity: string; // singleLineText in the live base ("150", "60 seated")
+  locations: string[]; // venue's own area: Bramhall / Stockport / Manchester
+  status: string;
+  tags: string[];
+  notes: string;
+  techSpec: EventAttachment[];
+  photo: EventAttachment[];
+  eventIds: string[];
+}
+
+export type VenueInput = Omit<Venue, "id" | "techSpec" | "photo" | "eventIds">;
+
+export interface Host {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  fee: number | null; // Standard Fee (currency)
+  instagram: string;
+  notes: string;
+  teamContacts: StaffRef[];
+  eventIds: string[];
+}
+
+export type HostInput = Omit<Host, "id" | "eventIds" | "teamContacts"> & {
+  teamContactIds: string[];
+};
+
 export type Role = "staff" | "manager";
 
 export interface SessionUser {

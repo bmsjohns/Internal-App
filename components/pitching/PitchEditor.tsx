@@ -223,16 +223,12 @@ export default function PitchEditor({ pitch }: { pitch: Pitch }) {
           <h1 className="m-0 text-[26px] leading-none">Edit pitch</h1>
         </div>
         {isWon && (
-          <button
-            disabled
-            title="Events proper arrives in Phase 2"
-            className="inline-flex cursor-not-allowed items-center gap-2 rounded border-[1.5px] border-dashed border-cream-2 bg-white px-[15px] py-[9px] text-[13px] font-semibold text-stone"
+          <Link
+            href={`/events/new?fromPitch=${pitch.id}`}
+            className="inline-flex items-center gap-2 rounded border-[1.5px] border-rust bg-white px-[15px] py-[9px] text-[13px] font-semibold text-rust hover:bg-shell"
           >
-            Convert to booking
-            <span className="rounded-full border border-cream-2 px-[5px] py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]">
-              Phase 2
-            </span>
-          </button>
+            Convert to booking →
+          </Link>
         )}
         <button onClick={remove} disabled={busy} className={btnDanger}>
           Delete

@@ -252,15 +252,15 @@ confirm:
 A real clean-up of the option list itself (like the Orders status migration)
 is a schema change for Ben to approve separately.
 
-**Publisher/Imprint (Phase 0 dependency):** the spec says the
-Publisher→Imprint schema fix (`events-phase0-publisher-imprint-spec.md`)
-should land first, but that spec file wasn't provided and the live base still
-has Publisher as a direct link on pitches. The app is built the Phase-0-shaped
-way regardless: **it writes Imprint only; Publisher displays read-only**,
-derived from the imprint (falling back to the legacy direct link on old
-records). When Phase 0 lands in Airtable nothing here should need to change.
-Note: the Imprints table's primary field is currently named "Publisher Name" —
-worth renaming to "Imprint Name" as part of Phase 0.
+**Publisher/Imprint (Phase 0):** the app writes Imprint only; Publisher
+displays read-only, derived from the imprint (falling back to the legacy
+direct link on old records), and the data layer accepts the Publisher field
+as either a link (pre-migration) or a lookup (post-migration). The full
+schema-fix plan — verified live-base analysis, Ben's decision gates, and the
+sandbox-first runbook — is in
+[docs/events-phase0-migration.md](docs/events-phase0-migration.md).
+**Nothing in the live base has been changed**; the migration waits on Ben's
+D1–D5 decisions and a duplicated sandbox base shared with the integration.
 
 **Pending schema addition (NOT applied — same sign-off rule as Orders):**
 - `Location` single select (`Simply Books` / `Prologue`) on Event Pitching,

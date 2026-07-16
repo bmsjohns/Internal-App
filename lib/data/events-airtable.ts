@@ -66,6 +66,8 @@ interface NameIndexes {
   venues: Map<string, string>;
   imprints: Map<string, string>;
   publishers: Map<string, string>;
+  /** imprint id → its parent publisher's name (via Imprints.Publishers link). */
+  imprintPublisher: Map<string, string>;
 }
 
 async function loadIndexes(): Promise<NameIndexes> {
@@ -76,10 +78,20 @@ async function loadIndexes(): Promise<NameIndexes> {
   ]);
   const toMap = (rs: any[], field: string) =>
     new Map<string, string>(rs.map((r) => [r.id, r.fields?.[field] ?? ""]));
+  const pubNames = toMap(publishers, "Publisher Name");
+  // Imprints' primary field is (mis)named "Publisher Name" pre-Phase-0;
+  // the migration renames it "Imprint Name". Read whichever exists.
+  const imprintName = (r: any) => r.fields?.["Imprint Name"] ?? r.fields?.["Publisher Name"] ?? "";
   return {
     venues: toMap(venues, "Name"),
-    imprints: toMap(imprints, "Publisher Name"), // Imprints' primary field is (mis)named "Publisher Name"
-    publishers: toMap(publishers, "Publisher Name"),
+    imprints: new Map(imprints.map((r) => [r.id, imprintName(r)])),
+    publishers: pubNames,
+    imprintPublisher: new Map(
+      imprints.map((r) => {
+        const parent: string[] = r.fields?.["Publishers"] ?? [];
+        return [r.id, parent.map((pid) => pubNames.get(pid)).filter(Boolean)[0] ?? ""];
+      })
+    ),
   };
 }
 
@@ -91,16 +103,28 @@ function toPitch(r: any, ix: NameIndexes): Pitch {
   const f = r.fields ?? {};
   const names = (ids: string[], map: Map<string, string>) =>
     ids.map((id) => map.get(id)).filter((n): n is string => !!n);
-  const publisherIds: string[] = f["Publisher"] ?? [];
+  // Pre-Phase-0 "Publisher" is a linked-record field (cell = record ids);
+  // after the migration it becomes a lookup (cell = publisher name strings).
+  // Accept both shapes so the app works on either side of the switchover.
+  const publisherCell: string[] = f["Publisher"] ?? [];
+  const publisherIds = publisherCell.filter((v) => ix.publishers.has(v));
   const imprintIds: string[] = f["Imprint"] ?? [];
   const venueIds: string[] = f["Proposed Venue(s)"] ?? [];
+  // Publisher display order of precedence: derived from the imprint's parent
+  // (the Phase-0-correct path), then whatever the Publisher cell holds —
+  // record ids resolved to names pre-migration, name strings post-migration.
+  const cellNames = publisherCell
+    .map((v) => ix.publishers.get(v) ?? (v.startsWith("rec") ? "" : v))
+    .filter(Boolean);
+  const derivedNames = imprintIds.map((id) => ix.imprintPublisher.get(id) ?? "").filter(Boolean);
+  const publisherNames = [...new Set([...derivedNames, ...cellNames])];
   return {
     id: r.id,
     authorName: f["Author Name"] ?? "",
     bookTitle: f["Book Title"] ?? "",
     isbn: f["ISBN"]?.text ?? "",
     publisherIds,
-    publisherNames: names(publisherIds, ix.publishers),
+    publisherNames,
     imprintIds,
     imprintNames: names(imprintIds, ix.imprints),
     publicationDate: f["Publication Date"] ?? null,

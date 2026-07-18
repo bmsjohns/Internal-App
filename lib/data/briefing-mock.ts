@@ -6,6 +6,7 @@ import type {
   SlackMessage,
   UrgentAlert,
   VenueBriefing,
+  WrapDraft,
   WrapUp,
 } from "@/lib/briefing";
 import { addDays, dateParts, todayLondon } from "@/lib/briefing";
@@ -95,7 +96,7 @@ const OPENING: Record<VenueKey, { hours: string; note: string }> = {
 // ---------------------------------------------------------------------------
 interface MockStore {
   taskDone: Map<string, boolean>; // `${date}:${taskId}`
-  wraps: Map<string, WrapUp>; // `${date}:${venue}` — date the wrap COVERS
+  wraps: Map<string, WrapDraft>; // `${date}:${venue}` — date the wrap COVERS
   alerts: Map<string, UrgentAlert[]>; // date shown
   dismissed: Set<string>; // `${date}:${alertId}`
   alertSeq: number;
@@ -136,7 +137,11 @@ function venueDay(date: string, venue: VenueKey): VenueBriefing {
   const isToday = date === today;
   const isPast = date < today;
   const yesterday = addDays(date, -1);
-  const savedWrap = wraps.get(`${yesterday}:${venue}`);
+  // The "Yesterday" card shows a PUBLISHED wrap only; a draft stays hidden
+  // until it's published.
+  const savedYesterday = wraps.get(`${yesterday}:${venue}`);
+  const publishedYesterday = savedYesterday && !savedYesterday.draft ? savedYesterday : null;
+  const wrapToday = wraps.get(`${date}:${venue}`) ?? null;
   return {
     roster: ROSTER[venue].map((s, i) => ({ ...s, id: `${venue}-${i}` })),
     tasks: tasksFor(date, venue),
@@ -147,7 +152,8 @@ function venueDay(date: string, venue: VenueKey): VenueBriefing {
       : isPast
         ? SLACK[venue].slice(0, 1).map((m, i) => ({ ...m, isNew: false, id: `${venue}-m${i}` }))
         : [],
-    wrap: savedWrap ?? { ...WRAP_SEED[venue] },
+    wrap: publishedYesterday ?? { ...WRAP_SEED[venue] },
+    wrapToday,
     stats: STATS[venue],
     opening: OPENING[venue],
   };
@@ -175,8 +181,8 @@ export const mockBriefingSource: BriefingDataSource = {
     taskDone.set(`${date}:${taskId}`, done);
   },
 
-  async saveWrap(date, venue, wrap) {
-    wraps.set(`${date}:${venue}`, wrap);
+  async saveWrap(date, venue, wrap, draft) {
+    wraps.set(`${date}:${venue}`, { ...wrap, draft });
   },
 
   async postAlert(date, text, loc) {

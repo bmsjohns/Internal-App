@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { VenueKey } from "@/lib/config";
-import type { BriefingDay, BriefingEvent, UrgentAlert, VenueBriefing } from "@/lib/briefing";
+import type { BriefingDay, BriefingEvent, UrgentAlert, VenueBriefing, WrapDraft } from "@/lib/briefing";
 import {
   ALERT_THEME,
   BRIEFING_COLUMNS,
@@ -10,6 +10,7 @@ import {
   addDays,
   dateParts,
   nowMinLondon,
+  parseCloseMinutes,
   relLabel,
   todayLondon,
 } from "@/lib/briefing";
@@ -67,7 +68,11 @@ export default function BriefingPage() {
   const { venue, setVenue } = useVenue();
   const [offset, setOffset] = useState(0);
   const [view, setView] = useState<View>("overview");
-  const [data, setData] = useState<{ day: BriefingDay; events: Record<VenueKey, BriefingEvent[]> } | null>(null);
+  const [data, setData] = useState<{
+    day: BriefingDay;
+    events: Record<VenueKey, BriefingEvent[]>;
+    viewer?: { canPostAlert: boolean };
+  } | null>(null);
   const [error, setError] = useState("");
   const [weather, setWeather] = useState<Weather | null>(null);
   const [nowMin, setNowMin] = useState(() => nowMinLondon());
@@ -164,16 +169,20 @@ export default function BriefingPage() {
   };
 
   const saveWrap = useCallback(
-    async (venueKey: VenueKey, headline: string, body: string) => {
+    async (venueKey: VenueKey, headline: string, body: string, draft: boolean): Promise<WrapDraft> => {
       const res = await fetch("/api/briefing/wrap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, venue: venueKey, headline, body }),
+        body: JSON.stringify({ date, venue: venueKey, headline, body, draft }),
       });
       if (!res.ok) throw new Error(`Save failed (HTTP ${res.status})`);
+      const out = await res.json();
+      return { ...out.wrap, draft: out.draft };
     },
     [date]
   );
+
+  const canPostAlert = !!data?.viewer?.canPostAlert;
 
   // ----- derived -----
 
@@ -185,7 +194,9 @@ export default function BriefingPage() {
   const visibleAlerts = (data?.day.alerts ?? []).filter(
     (a) => venue === "all" || a.loc === "both" || a.loc === venue
   );
-  const milestones = (data?.day.milestones ?? []).filter((m) => keys.includes(m.venue));
+  const milestones = (data?.day.milestones ?? []).filter(
+    (m) => m.venue === "both" || keys.includes(m.venue)
+  );
   const newSlack = keys
     .map((k) => ({
       k,
@@ -243,6 +254,20 @@ export default function BriefingPage() {
                 />
                 {data?.day.rosterAsOf ? `Synced ${data.day.rosterAsOf}` : "Live"}
               </div>
+              {canPostAlert && (
+                <button
+                  onClick={() => setAdding((a) => !a)}
+                  title="Post urgent alert"
+                  aria-label="Post urgent alert"
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                    adding
+                      ? "border-[#B0812F] bg-[#FBF3E6] text-[#8A5A12]"
+                      : "border-cream-2 bg-white text-stone hover:border-[#C99A3E] hover:text-[#8A5A12]"
+                  }`}
+                >
+                  {ic(ICON_ALERT, 15)}
+                </button>
+              )}
             </div>
           </div>
 
@@ -340,16 +365,9 @@ export default function BriefingPage() {
         )}
 
         {/* ============ urgent alerts ============ */}
-        <div className="mb-3.5 flex justify-end">
-          <button
-            onClick={() => setAdding((a) => !a)}
-            className="inline-flex items-center gap-[7px] rounded-full border-[1.5px] border-[#C99A3E] bg-white px-[15px] py-2 text-[12.5px] font-semibold text-[#8A5A12] hover:border-[#8A5A12]"
-          >
-            {ic(ICON_ALERT, 16)}
-            Post urgent alert
-          </button>
-        </div>
-        {adding && (
+        {/* Compose panel opens from the small alert control by the weather
+            (managers only); the display bar below is visible to everyone. */}
+        {canPostAlert && adding && (
           <div className="mb-3.5 rounded-[10px] border-[1.5px] border-[#E7D3A9] bg-[#FBF3E6] px-4 py-3.5">
             <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[.14em] text-[#8A5A12]">
               New urgent alert
@@ -481,12 +499,15 @@ export default function BriefingPage() {
             <span className="flex shrink-0 text-rust">{ic(ICON_CAKE, 18)}</span>
             <span className="text-[11px] font-bold uppercase tracking-[.14em] text-rust">Celebrating today</span>
             <div className="flex flex-1 flex-wrap gap-2.5">
-              {milestones.map((m) => (
+              {milestones.map((m, i) => (
                 <span
-                  key={`${m.venue}-${m.who}`}
+                  key={`${m.venue}-${m.who}-${i}`}
                   className="inline-flex items-center gap-2 rounded-full border border-[#F1CFCB] bg-white py-[5px] pl-[11px] pr-[13px] text-[13.5px] text-charcoal"
                 >
-                  <span className="h-2 w-2 rounded-full" style={{ background: BRIEFING_VENUES[m.venue].accent }} />
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: m.venue === "both" ? "#8C857C" : BRIEFING_VENUES[m.venue].accent }}
+                  />
                   <span className="font-semibold">{m.who}</span> {m.what}
                 </span>
               ))}
@@ -518,8 +539,12 @@ export default function BriefingPage() {
                       pos={{ col, row: rows.wrap }}
                       theme={theme}
                       wrap={v.wrap}
+                      today={v.wrapToday}
+                      isToday={isToday}
+                      closeMin={parseCloseMinutes(v.opening.hours)}
+                      nowMin={nowMin}
                       yesterdayLabel={dateParts(addDays(date, -1)).dmShort}
-                      onSave={(h, b) => saveWrap(k, h, b)}
+                      onSave={(h, b, dr) => saveWrap(k, h, b, dr)}
                     />
                   ) : (
                     <Skeleton pos={{ col, row: rows.wrap }} h={120} />

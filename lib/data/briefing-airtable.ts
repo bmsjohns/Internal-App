@@ -1,5 +1,5 @@
 import type { VenueKey } from "@/lib/config";
-import type { UrgentAlert, WrapUp } from "@/lib/briefing";
+import type { UrgentAlert, WrapDraft, WrapUp } from "@/lib/briefing";
 
 // Airtable persistence for the briefing's wrap-ups and urgent alerts — the
 // two things that must outlive a serverless invocation. Lives in the
@@ -100,25 +100,44 @@ const byDate = (table: string, date: string, extra = "") =>
     extra ? `AND(${dateEq(date)},${extra})` : dateEq(date)
   )}`;
 
-/** Wrap-ups COVERING `date` (the page shows them on the following day). */
+const rowToWrap = (fields: any): WrapDraft => ({
+  headline: fields.Headline ?? "",
+  body: fields.Body ?? "",
+  byline: fields.Byline ?? "",
+  postedAt: fields["Posted At"] ?? "",
+  draft: !!fields.Draft,
+});
+
+/** PUBLISHED wraps covering `date` (shown on the following day's briefing —
+ *  drafts are excluded so an unfinished note never surfaces). */
 export async function getAirtableWraps(date: string): Promise<Partial<Record<VenueKey, WrapUp>>> {
-  const data = await at(byDate(WRAPS_TABLE, date));
+  const data = await at(byDate(WRAPS_TABLE, date, "NOT({Draft})"));
   const out: Partial<Record<VenueKey, WrapUp>> = {};
   for (const r of data.records ?? []) {
     const venue = (Object.keys(VENUE_NAME) as VenueKey[]).find((k) => VENUE_NAME[k] === r.fields.Venue);
-    if (!venue) continue;
-    out[venue] = {
-      headline: r.fields.Headline ?? "",
-      body: r.fields.Body ?? "",
-      byline: r.fields.Byline ?? "",
-      postedAt: r.fields["Posted At"] ?? "",
-    };
+    if (venue) out[venue] = rowToWrap(r.fields);
+  }
+  return out;
+}
+
+/** This day's OWN wraps incl. drafts — drives the same-day editor state. */
+export async function getAirtableWrapsForDay(date: string): Promise<Partial<Record<VenueKey, WrapDraft>>> {
+  const data = await at(byDate(WRAPS_TABLE, date));
+  const out: Partial<Record<VenueKey, WrapDraft>> = {};
+  for (const r of data.records ?? []) {
+    const venue = (Object.keys(VENUE_NAME) as VenueKey[]).find((k) => VENUE_NAME[k] === r.fields.Venue);
+    if (venue) out[venue] = rowToWrap(r.fields);
   }
   return out;
 }
 
 /** Upsert — one wrap per date × venue, edits overwrite. */
-export async function saveAirtableWrap(date: string, venue: VenueKey, wrap: WrapUp): Promise<void> {
+export async function saveAirtableWrap(
+  date: string,
+  venue: VenueKey,
+  wrap: WrapUp,
+  draft: boolean
+): Promise<void> {
   const fields = {
     Date: date,
     Venue: VENUE_NAME[venue],
@@ -126,6 +145,7 @@ export async function saveAirtableWrap(date: string, venue: VenueKey, wrap: Wrap
     Body: wrap.body,
     Byline: wrap.byline,
     "Posted At": wrap.postedAt,
+    Draft: draft,
   };
   const existing = await at(byDate(WRAPS_TABLE, date, `{Venue}='${VENUE_NAME[venue]}'`));
   const id = existing.records?.[0]?.id;

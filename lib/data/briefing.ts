@@ -2,13 +2,14 @@ import type { BriefingDay } from "@/lib/briefing";
 import { addDays } from "@/lib/briefing";
 import type { BriefingDataSource } from "./briefing-source";
 import { mockBriefingSource } from "./briefing-mock";
-import { deputyConfigured, getDeputyDay, setDeputyTaskDone } from "./briefing-deputy";
+import { deputyConfigured, getDeputyDay, getDeputyMilestones, setDeputyTaskDone } from "./briefing-deputy";
 import { getSlackDay, slackConfigured } from "./briefing-slack";
 import {
   briefingAirtableReady,
   dismissAirtableAlert,
   getAirtableAlerts,
   getAirtableWraps,
+  getAirtableWrapsForDay,
   postAirtableAlert,
   saveAirtableWrap,
 } from "./briefing-airtable";
@@ -37,6 +38,14 @@ const composedBriefingSource: BriefingDataSource = {
       } catch (e) {
         console.error("Briefing: Deputy overlay failed", e);
       }
+      // Celebrations are real once Deputy is on: an empty result correctly
+      // hides the band rather than showing the mock's sample names.
+      try {
+        day.milestones = await getDeputyMilestones(date);
+      } catch (e) {
+        console.error("Briefing: Deputy milestones failed", e);
+        day.milestones = [];
+      }
     }
     if (slackConfigured()) {
       for (const venue of ["prologue", "simply"] as const) {
@@ -51,13 +60,15 @@ const composedBriefingSource: BriefingDataSource = {
       try {
         // The page shows the wrap COVERING the previous day. Opening hours
         // resolve regular pattern + date overrides from the same base.
-        const [wraps, alerts, hours] = await Promise.all([
+        const [wraps, wrapsToday, alerts, hours] = await Promise.all([
           getAirtableWraps(addDays(date, -1)),
+          getAirtableWrapsForDay(date),
           getAirtableAlerts(date),
           getOpeningHours(date),
         ]);
         for (const venue of ["prologue", "simply"] as const) {
           day.venues[venue].wrap = wraps[venue] ?? null;
+          day.venues[venue].wrapToday = wrapsToday[venue] ?? null;
           if (hours?.[venue]) day.venues[venue].opening = hours[venue]!;
         }
         day.alerts = alerts;
@@ -75,9 +86,9 @@ const composedBriefingSource: BriefingDataSource = {
 
   // Writes do NOT silently fall back once Airtable is the store — a wrap
   // that only landed in ephemeral memory would look saved and then vanish.
-  async saveWrap(date, venue, wrap) {
-    if (await briefingAirtableReady()) return saveAirtableWrap(date, venue, wrap);
-    return mockBriefingSource.saveWrap(date, venue, wrap);
+  async saveWrap(date, venue, wrap, draft) {
+    if (await briefingAirtableReady()) return saveAirtableWrap(date, venue, wrap, draft);
+    return mockBriefingSource.saveWrap(date, venue, wrap, draft);
   },
   async postAlert(date, text, loc) {
     if (await briefingAirtableReady()) return postAirtableAlert(date, text, loc);

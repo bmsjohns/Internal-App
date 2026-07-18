@@ -6,6 +6,7 @@ import type {
   BriefingEvent,
   BriefingVenueTheme,
   VenueBriefing,
+  WrapDraft,
   WrapUp,
 } from "@/lib/briefing";
 import { fmtMin, onShiftNow } from "@/lib/briefing";
@@ -148,37 +149,58 @@ export function WrapCard({
   pos,
   theme,
   wrap,
+  today,
+  isToday,
+  closeMin,
+  nowMin,
   yesterdayLabel,
   onSave,
 }: {
   pos: CellPos;
   theme: BriefingVenueTheme;
   wrap: WrapUp | null;
+  today: WrapDraft | null;
+  isToday: boolean;
+  closeMin: number | null;
+  nowMin: number;
   yesterdayLabel: string;
-  onSave: (headline: string, body: string) => Promise<void>;
+  onSave: (headline: string, body: string, draft: boolean) => Promise<WrapDraft>;
 }) {
   const [open, setOpen] = useState(true);
   const [writing, setWriting] = useState(false);
-  const [headline, setHeadline] = useState("");
-  const [body, setBody] = useState("");
-  const [saved, setSaved] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [headline, setHeadline] = useState(today?.headline ?? "");
+  const [body, setBody] = useState(today?.body ?? "");
+  const [busy, setBusy] = useState<"draft" | "publish" | null>(null);
   const [error, setError] = useState("");
+  // Local mirror of today's wrap so a save reflects immediately and survives
+  // without a full page refetch; the server is the source of truth on reload.
+  const [state, setState] = useState<WrapDraft | null>(today);
 
-  const save = async () => {
-    if (!body.trim() || busy) return;
-    setBusy(true);
+  const beginEdit = () => {
+    setHeadline(state?.headline ?? "");
+    setBody(state?.body ?? "");
+    setError("");
+    setWriting(true);
+  };
+
+  const save = async (draft: boolean, hl = headline, bd = body) => {
+    if (!bd.trim() || busy) return;
+    setBusy(draft ? "draft" : "publish");
     setError("");
     try {
-      await onSave(headline, body);
-      setSaved(true);
+      const saved = await onSave(hl, bd, draft);
+      setState(saved);
       setWriting(false);
     } catch {
       setError("Couldn't save — check the connection and try again.");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
+
+  // An hour before close, nudge for the wrap-up until it's published.
+  const remindDue =
+    isToday && closeMin != null && nowMin >= closeMin - 60 && nowMin < closeMin && !(state && !state.draft);
 
   return (
     <Cell pos={pos}>
@@ -187,9 +209,7 @@ export function WrapCard({
           onClick={() => setOpen((o) => !o)}
           className="flex w-full items-start gap-3 px-[18px] py-[15px] text-left"
         >
-          <span
-            className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-white/15 text-cream"
-          >
+          <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-white/15 text-cream">
             {ic(ICONS.rewind, 16)}
           </span>
           <div className="min-w-0 flex-1">
@@ -206,58 +226,104 @@ export function WrapCard({
         </button>
         {open && (
           <div className="px-[18px] pb-[18px] sm:pl-[46px]">
-            {wrap && (
-              <p className="mb-3.5 font-display text-[15px] leading-[1.55] text-white/90">{wrap.body}</p>
-            )}
-            {writing ? (
-              <div className="flex flex-col gap-2">
-                <input
-                  value={headline}
-                  onChange={(e) => setHeadline(e.target.value)}
-                  placeholder="One-line headline (optional)"
-                  className="rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-[13.5px] text-cream placeholder:text-white/50"
-                />
-                <textarea
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  rows={4}
-                  placeholder="How did today go? Anything the morning team should know?"
-                  className="rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-[13.5px] leading-relaxed text-cream placeholder:text-white/50"
-                />
-                {error && <div className="text-[12px] font-semibold text-[#FFD9D2]">{error}</div>}
-                <div className="flex items-center gap-2">
+            {wrap && <p className="mb-3.5 font-display text-[15px] leading-[1.55] text-white/90">{wrap.body}</p>}
+
+            {/* Today's wrap-up entry — only on today's briefing */}
+            {isToday && (
+              <div className="mt-1 rounded-lg border border-white/20 bg-white/10 p-3">
+                {remindDue && !writing && (
+                  <div className="mb-2.5 flex items-center gap-2 text-[12px] font-semibold text-cream">
+                    {ic(ICONS.clock, 15)}
+                    An hour to close — {state?.draft ? "publish today's wrap-up" : "don't forget today's wrap-up"}.
+                  </div>
+                )}
+                {writing ? (
+                  <div className="flex flex-col gap-2">
+                    <input
+                      value={headline}
+                      onChange={(e) => setHeadline(e.target.value)}
+                      placeholder="One-line headline (optional)"
+                      className="rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-[13.5px] text-cream placeholder:text-white/50"
+                    />
+                    <textarea
+                      value={body}
+                      onChange={(e) => setBody(e.target.value)}
+                      rows={4}
+                      placeholder="How did today go? Anything the morning team should know?"
+                      className="rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-[13.5px] leading-relaxed text-cream placeholder:text-white/50"
+                    />
+                    {error && <div className="text-[12px] font-semibold text-[#FFD9D2]">{error}</div>}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => save(false)}
+                        disabled={!!busy || !body.trim()}
+                        className="rounded-full bg-white px-4 py-2 text-[12.5px] font-semibold disabled:opacity-50"
+                        style={{ color: theme.deep }}
+                      >
+                        {busy === "publish" ? "Publishing…" : "Publish"}
+                      </button>
+                      <button
+                        onClick={() => save(true)}
+                        disabled={!!busy || !body.trim()}
+                        className="rounded-full border-[1.5px] border-white/60 px-4 py-2 text-[12.5px] font-semibold text-cream disabled:opacity-50"
+                      >
+                        {busy === "draft" ? "Saving…" : "Save draft"}
+                      </button>
+                      <button
+                        onClick={() => setWriting(false)}
+                        className="rounded-full px-3 py-2 text-[12.5px] font-semibold text-cream/80 hover:text-cream"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : state && !state.draft ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-cream">
+                      {ic(ICONS.check, 14)} Published — opens tomorrow&apos;s briefing
+                    </span>
+                    <span className="text-[11.5px]" style={{ color: theme.soft }}>
+                      {state.byline} · {state.postedAt}
+                    </span>
+                    <button
+                      onClick={beginEdit}
+                      className="ml-auto rounded-full border border-white/40 px-3 py-1.5 text-[12px] font-semibold text-cream hover:border-white"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ) : state && state.draft ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[12.5px] font-semibold text-cream">Draft saved · {state.postedAt}</span>
+                    <span className="text-[11.5px]" style={{ color: theme.soft }}>
+                      not published yet
+                    </span>
+                    <div className="ml-auto flex gap-2">
+                      <button
+                        onClick={beginEdit}
+                        className="rounded-full border border-white/40 px-3 py-1.5 text-[12px] font-semibold text-cream hover:border-white"
+                      >
+                        Continue
+                      </button>
+                      <button
+                        onClick={() => save(false, state.headline, state.body)}
+                        disabled={!!busy}
+                        className="rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50"
+                        style={{ color: theme.deep }}
+                      >
+                        {busy === "publish" ? "Publishing…" : "Publish"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
                   <button
-                    onClick={save}
-                    disabled={busy || !body.trim()}
-                    className="rounded-full bg-white px-4 py-2 text-[12.5px] font-semibold disabled:opacity-50"
-                    style={{ color: theme.deep }}
+                    onClick={beginEdit}
+                    className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-white/50 px-3.5 py-2 text-[12.5px] font-semibold text-cream hover:border-white"
                   >
-                    {busy ? "Saving…" : "Save wrap-up"}
+                    {ic(ICONS.edit, 15)}
+                    Write today&apos;s wrap-up
                   </button>
-                  <button
-                    onClick={() => setWriting(false)}
-                    className="rounded-full border border-white/50 px-4 py-2 text-[12.5px] font-semibold text-cream"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  onClick={() => setWriting(true)}
-                  className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-white/50 px-3.5 py-2 text-[12.5px] font-semibold text-cream hover:border-white"
-                >
-                  {ic(ICONS.edit, 15)}
-                  {saved ? "Edit today's wrap-up" : "Write today's wrap-up"}
-                </button>
-                <span className="text-[11.5px]" style={{ color: theme.soft }}>
-                  {saved
-                    ? "Saved — it'll open tomorrow's briefing."
-                    : wrap
-                      ? `${wrap.byline} · posted ${wrap.postedAt}`
-                      : ""}
-                </span>
+                )}
               </div>
             )}
           </div>

@@ -41,6 +41,12 @@ export interface WrapUp {
   postedAt: string; // display form, e.g. "22.40"
 }
 
+/** The current day's own wrap-up state, for the same-day editor: a shared
+ *  draft that's being written through the day, or a published wrap. */
+export interface WrapDraft extends WrapUp {
+  draft: boolean;
+}
+
 export interface UrgentAlert {
   id: string;
   text: string;
@@ -48,7 +54,7 @@ export interface UrgentAlert {
 }
 
 export interface Milestone {
-  venue: VenueKey;
+  venue: VenueKey | "both"; // "both" when the person's venue isn't known
   who: string;
   what: string; // "birthday today", "3 years today"
 }
@@ -76,6 +82,8 @@ export interface VenueBriefing {
   slack: SlackMessage[];
   /** Wrap-up covering the PREVIOUS day (that's what the page shows). */
   wrap: WrapUp | null;
+  /** This day's own wrap-up (draft or published), for the same-day editor. */
+  wrapToday: WrapDraft | null;
   stats: StatTile[];
   opening: { hours: string; note: string };
 }
@@ -233,6 +241,25 @@ export function splitEventTime(hhmm: string): { time: string; ampm: string } {
 }
 
 export const onShiftNow = (s: ShiftEntry, nowMin: number) => nowMin >= s.startMin && nowMin < s.endMin;
+
+/** Parse a clock token like "5.30pm", "11pm", "1am", "12pm" → minutes from
+ *  midnight, or null. Used to time the end-of-day wrap-up reminder. */
+export function parseClockToken(token: string): number | null {
+  const m = token.trim().toLowerCase().match(/^(\d{1,2})(?:[.:](\d{2}))?\s*(am|pm)$/);
+  if (!m) return null;
+  let h = Number(m[1]) % 12;
+  const min = m[2] ? Number(m[2]) : 0;
+  if (m[3] === "pm") h += 12;
+  return h * 60 + min;
+}
+
+/** The closing time from an "8am – 11pm" hours string, in minutes; null for
+ *  "Closed today" or anything unparseable. */
+export function parseCloseMinutes(hours: string): number | null {
+  const parts = hours.split(/[–-]/);
+  if (parts.length < 2) return null;
+  return parseClockToken(parts[parts.length - 1]);
+}
 
 // ---------------------------------------------------------------------------
 // Events → briefing cards (spec §3: reuse the Events module, don't re-query).

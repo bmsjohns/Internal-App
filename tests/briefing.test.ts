@@ -36,6 +36,17 @@ describe("briefing time formatting", () => {
     expect(splitEventTime("")).toEqual({ time: "TBC", ampm: "" });
   });
 
+  it("parses closing time for the wrap-up reminder", async () => {
+    const { parseCloseMinutes, parseClockToken } = await import("@/lib/briefing");
+    expect(parseClockToken("5.30pm")).toBe(17 * 60 + 30);
+    expect(parseClockToken("11pm")).toBe(23 * 60);
+    expect(parseClockToken("12pm")).toBe(12 * 60);
+    expect(parseClockToken("12am")).toBe(0);
+    expect(parseCloseMinutes("9am – 5.30pm")).toBe(17 * 60 + 30);
+    expect(parseCloseMinutes("8am – 11pm")).toBe(23 * 60);
+    expect(parseCloseMinutes("Closed today")).toBeNull();
+  });
+
   it("knows who is on shift now", () => {
     const s = { id: "x", name: "A", role: "", startMin: 540, endMin: 1020 };
     expect(onShiftNow(s, 539)).toBe(false);

@@ -15,8 +15,9 @@ export interface BriefingDataSource {
   /** Tick/untick a task (writes back to Deputy when that's the source). */
   setTaskDone(date: string, taskId: string, done: boolean): Promise<void>;
 
-  /** Save the wrap-up covering `date` for one venue (spec §7 v1). */
-  saveWrap(date: string, venue: VenueKey, wrap: WrapUp): Promise<void>;
+  /** Save the wrap-up covering `date` for one venue (spec §7 v1). `draft`
+   *  keeps it off the next day's briefing until published. */
+  saveWrap(date: string, venue: VenueKey, wrap: WrapUp, draft: boolean): Promise<void>;
 
   postAlert(date: string, text: string, loc: UrgentAlert["loc"]): Promise<UrgentAlert>;
   dismissAlert(date: string, alertId: string): Promise<void>;

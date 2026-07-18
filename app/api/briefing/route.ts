@@ -22,5 +22,8 @@ export async function GET(req: NextRequest) {
       .listEvents()
       .catch(() => []), // events failing must not blank the whole briefing
   ]);
-  return NextResponse.json({ day, events: briefingEvents(allEvents, date) });
+  // Posting urgent alerts is manager-only (§ access). The client hides the
+  // control accordingly; the POST route enforces it server-side too.
+  const viewer = { canPostAlert: user.role === "manager" };
+  return NextResponse.json({ day, events: briefingEvents(allEvents, date), viewer });
 }

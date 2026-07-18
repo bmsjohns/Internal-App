@@ -3,12 +3,14 @@ import { getSessionUser } from "@/lib/auth";
 import { getBriefingSource } from "@/lib/data/briefing";
 
 // Spec §7 v1: whoever compiles the wrap-up writes it here, saved against the
-// date it covers; it surfaces on the NEXT day's briefing. Whether it should
-// also auto-post to Slack is an open question for Ben (spec §7) — not built.
+// date it covers; a published wrap surfaces on the NEXT day's briefing. A
+// draft (`draft: true`) is the shared work-in-progress saved through the day
+// and stays off the next day's briefing until published. Whether publishing
+// should also auto-post to Slack is an open question for Ben (spec §7).
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { date, venue, headline, body } = await req.json();
+  const { date, venue, headline, body, draft } = await req.json();
   if (
     typeof date !== "string" ||
     !["prologue", "simply"].includes(venue) ||
@@ -31,6 +33,6 @@ export async function POST(req: NextRequest) {
     byline: user.name.split(/\s+/)[0],
     postedAt,
   };
-  await getBriefingSource().saveWrap(date, venue, wrap);
-  return NextResponse.json({ wrap }, { status: 201 });
+  await getBriefingSource().saveWrap(date, venue, wrap, draft === true);
+  return NextResponse.json({ wrap, draft: draft === true }, { status: 201 });
 }

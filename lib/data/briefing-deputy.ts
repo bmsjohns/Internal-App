@@ -1,5 +1,5 @@
 import type { VenueKey } from "@/lib/config";
-import type { BriefTask, ShiftEntry } from "@/lib/briefing";
+import type { BriefTask, Milestone, ShiftEntry } from "@/lib/briefing";
 import { fmtMin } from "@/lib/briefing";
 
 // Deputy adapter for the briefing's On Shift + Notes/Tasks sections
@@ -216,6 +216,71 @@ async function fetchDay(date: string): Promise<DayCache> {
 
 export async function getDeputyDay(date: string) {
   return fetchDay(date);
+}
+
+// ---------------------------------------------------------------------------
+// Celebrations (spec §6) — birthdays + work anniversaries from Deputy staff
+// records. Best-effort: if the account doesn't populate these dates, or the
+// field names differ, this returns [] and the band simply hides. Privacy:
+// only the first name + "birthday today" / "N years today" ever leave here —
+// never the date of birth itself.
+// ---------------------------------------------------------------------------
+
+/** "MM-DD" for a date-ish value, or null. */
+function monthDayOf(v: unknown): string | null {
+  if (!v) return null;
+  const s = String(v);
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[2]}-${iso[3]}`;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+const yearOf = (v: unknown): number | null => {
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? null : d.getUTCFullYear();
+};
+
+let employeeCache: { at: number; rows: any[] } | null = null;
+const EMPLOYEE_CACHE_MS = 6 * 60 * 60 * 1000;
+
+async function employees(): Promise<any[]> {
+  if (employeeCache && Date.now() - employeeCache.at < EMPLOYEE_CACHE_MS) return employeeCache.rows;
+  const rows: any[] = await deputy("resource/Employee/QUERY", {
+    search: { active: { field: "Active", type: "eq", data: true } },
+    max: 500,
+  });
+  employeeCache = { at: Date.now(), rows };
+  return rows;
+}
+
+export async function getDeputyMilestones(date: string): Promise<Milestone[]> {
+  const monthDay = date.slice(5); // "MM-DD" of the selected date
+  const year = Number(date.slice(0, 4));
+  const map = await companies();
+  const companyVenue = (id: unknown): VenueKey | "both" =>
+    typeof id === "number" && map.prologue.includes(id)
+      ? "prologue"
+      : typeof id === "number" && map.simply.includes(id)
+        ? "simply"
+        : "both";
+
+  const out: Milestone[] = [];
+  for (const e of await employees()) {
+    const who = e.FirstName || String(e.DisplayName ?? "").split(" ")[0] || "Someone";
+    const venue = companyVenue(e.Company);
+
+    if (monthDayOf(e.DateOfBirth ?? e.Birthday) === monthDay) {
+      out.push({ venue, who, what: "birthday today" });
+    }
+    const start = e.DateOfHire ?? e.StartDate ?? e.JoinDate ?? e.DateCommenced;
+    if (monthDayOf(start) === monthDay) {
+      const years = year - (yearOf(start) ?? year);
+      if (years >= 1) out.push({ venue, who, what: `${years} year${years > 1 ? "s" : ""} today` });
+    }
+  }
+  return out;
 }
 
 /** Write a completion back to Deputy and refresh the cached copy. */

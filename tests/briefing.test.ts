@@ -84,6 +84,21 @@ describe("integration name matching (no-ids rule)", () => {
     expect(venueForLocationName("Bramhall shop")).toBe("simply");
     expect(venueForLocationName("Head Office")).toBeNull();
   });
+
+  it("lets an explicit Deputy External ID / code win over the name", async () => {
+    const { venueForCompany } = await import("@/lib/data/briefing-deputy");
+    expect(venueForCompany({ ExternalId: "prologue", CompanyName: "Shop 2" })).toBe("prologue");
+    expect(venueForCompany({ Code: "SB", CompanyName: "Shop 1" })).toBe("simply");
+    expect(venueForCompany({ CompanyName: "Simply Books" })).toBe("simply");
+    expect(venueForCompany({ CompanyName: "Warehouse" })).toBeNull();
+  });
+
+  it("normalises pasted Deputy hostnames", async () => {
+    const { normalizeDeputyHost } = await import("@/lib/data/briefing-deputy");
+    expect(normalizeDeputyHost("8444e614052702.eu.deputy.com/")).toBe("8444e614052702.eu.deputy.com");
+    expect(normalizeDeputyHost("https://x.eu.deputy.com/exec/devapp")).toBe("x.eu.deputy.com");
+    expect(normalizeDeputyHost("  x.na.deputy.com  ")).toBe("x.na.deputy.com");
+  });
 });
 
 describe("events → briefing columns", () => {

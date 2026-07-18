@@ -22,6 +22,20 @@ import { fmtMin } from "@/lib/briefing";
 
 export const deputyConfigured = () => !!(process.env.DEPUTY_HOSTNAME && process.env.DEPUTY_API_TOKEN);
 
+/** Pure normaliser, exported for tests: env values arrive as whatever was
+ *  pasted into Vercel — with protocol, trailing slash, a path, or stray
+ *  whitespace. A trailing slash alone turns every API URL into //api/…,
+ *  which Deputy answers with "404 No method for  found". */
+export const normalizeDeputyHost = (raw: string): string =>
+  raw
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/[/?#].*$/, "")
+    .replace(/\.$/, "");
+
+const deputyHost = () => normalizeDeputyHost(process.env.DEPUTY_HOSTNAME ?? "");
+const deputyToken = () => (process.env.DEPUTY_API_TOKEN ?? "").trim();
+
 /** Pure matcher, exported for tests: which venue a Deputy location is. */
 export function venueForLocationName(name: string): VenueKey | null {
   const n = name.toLowerCase();
@@ -30,11 +44,28 @@ export function venueForLocationName(name: string): VenueKey | null {
   return null;
 }
 
+/** Full location matcher: an explicit per-location tag set in Deputy wins
+ *  over name guessing. Set the location's External ID (or code) to
+ *  "prologue" / "simply" in Deputy's location settings to pin the mapping. */
+export function venueForCompany(c: {
+  Code?: string | null;
+  ExternalId?: string | null;
+  CompanyName?: string | null;
+  TradingName?: string | null;
+}): VenueKey | null {
+  for (const tag of [c.ExternalId, c.Code]) {
+    const t = (tag ?? "").trim().toLowerCase();
+    if (["prologue", "pro", "plg"].includes(t)) return "prologue";
+    if (["simply", "sim", "sb"].includes(t)) return "simply";
+  }
+  return venueForLocationName(`${c.CompanyName ?? ""} ${c.TradingName ?? ""}`);
+}
+
 async function deputy(path: string, body?: unknown): Promise<any> {
-  const res = await fetch(`https://${process.env.DEPUTY_HOSTNAME}/api/v1/${path}`, {
+  const res = await fetch(`https://${deputyHost()}/api/v1/${path}`, {
     method: body === undefined ? "GET" : "POST",
     headers: {
-      Authorization: `Bearer ${process.env.DEPUTY_API_TOKEN}`,
+      Authorization: `Bearer ${deputyToken()}`,
       "Content-Type": "application/json",
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -64,7 +95,7 @@ async function companies(): Promise<CompanyMap> {
   if (map.prologue.length === 0 || map.simply.length === 0) {
     const rows: any[] = await deputy("resource/Company/QUERY", { search: {}, max: 100 });
     for (const c of rows) {
-      const venue = venueForLocationName(c.CompanyName ?? "");
+      const venue = venueForCompany(c);
       if (venue && !envOverride(venue)) map[venue].push(c.Id);
     }
     for (const venue of ["prologue", "simply"] as VenueKey[]) {

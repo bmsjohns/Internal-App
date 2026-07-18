@@ -54,21 +54,39 @@ function env(name: string): string {
 
 const hasNewFields = () => process.env.AIRTABLE_HAS_NEW_FIELDS === "true";
 
+// Airtable allows 5 requests/second per base, and every /api/orders hit lists
+// two tables — a few quick navigations used to trip RATE_LIMIT_REACHED in
+// production. Two defences: at() retries 429s with backoff, and list reads
+// are coalesced + cached briefly (below).
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const RETRY_LIMIT = 3;
+// Cap the wait so a retry can't blow the serverless function timeout even if
+// Airtable sends a large Retry-After.
+const MAX_RETRY_WAIT_MS = 5_000;
+
 async function at(path: string, init?: RequestInit): Promise<any> {
-  const res = await fetch(`${API}/${baseId()}/${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${env("AIRTABLE_API_KEY")}`,
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Airtable ${res.status}: ${body}`);
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${API}/${baseId()}/${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${env("AIRTABLE_API_KEY")}`,
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+      cache: "no-store",
+    });
+    if (res.status === 429 && attempt < RETRY_LIMIT) {
+      const retryAfter = Number(res.headers.get("Retry-After")) * 1000;
+      await sleep(Math.min(retryAfter > 0 ? retryAfter : 400 * 2 ** attempt, MAX_RETRY_WAIT_MS));
+      continue;
+    }
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Airtable ${res.status}: ${body}`);
+    }
+    return res.json();
   }
-  return res.json();
 }
 
 async function atList(table: string): Promise<any[]> {
@@ -82,6 +100,29 @@ async function atList(table: string): Promise<any[]> {
     offset = data.offset;
   } while (offset);
   return records;
+}
+
+// Per-table list cache: concurrent callers share one in-flight request, and
+// the result is reused for a few seconds. Writes invalidate so the caller who
+// mutated sees their change immediately; other serverless instances have
+// their own cache, so cross-instance staleness is bounded by the TTL.
+const LIST_CACHE_TTL_MS = 10_000;
+const listCache = new Map<string, { at: number; records: Promise<any[]> }>();
+
+function cachedList(table: string): Promise<any[]> {
+  const hit = listCache.get(table);
+  if (hit && Date.now() - hit.at < LIST_CACHE_TTL_MS) return hit.records;
+  const records = atList(table).catch((e) => {
+    listCache.delete(table);
+    throw e;
+  });
+  listCache.set(table, { at: Date.now(), records });
+  return records;
+}
+
+export function clearListCache(table?: string) {
+  if (table) listCache.delete(table);
+  else listCache.clear();
 }
 
 function toOrder(r: any): Order {
@@ -179,9 +220,16 @@ function fromCustomer(input: Partial<CustomerInput>): Record<string, unknown> {
   return f;
 }
 
+// Order writes also invalidate the customer cache: the Customers link field
+// updates the linked customer's Orders rollup.
+function invalidateOrders() {
+  clearListCache(ORDERS_TABLE);
+  clearListCache(CUSTOMERS_TABLE);
+}
+
 export const airtableDataSource: DataSource = {
   async listOrders() {
-    const records = await atList(ORDERS_TABLE);
+    const records = await cachedList(ORDERS_TABLE);
     return records.map(toOrder);
   },
   async getOrder(id) {
@@ -196,6 +244,7 @@ export const airtableDataSource: DataSource = {
       method: "POST",
       body: JSON.stringify({ fields: fromOrder(input) }),
     });
+    invalidateOrders();
     return toOrder(data);
   },
   async updateOrder(id, input) {
@@ -203,14 +252,16 @@ export const airtableDataSource: DataSource = {
       method: "PATCH",
       body: JSON.stringify({ fields: fromOrder(input) }),
     });
+    invalidateOrders();
     return toOrder(data);
   },
   async deleteOrder(id) {
     await at(`${ORDERS_TABLE}/${id}`, { method: "DELETE" });
+    invalidateOrders();
   },
 
   async listCustomers() {
-    const records = await atList(CUSTOMERS_TABLE);
+    const records = await cachedList(CUSTOMERS_TABLE);
     return records.map(toCustomer);
   },
   async getCustomer(id) {
@@ -225,6 +276,7 @@ export const airtableDataSource: DataSource = {
       method: "POST",
       body: JSON.stringify({ fields: fromCustomer(input) }),
     });
+    clearListCache(CUSTOMERS_TABLE);
     return toCustomer(data);
   },
   async updateCustomer(id, input) {
@@ -232,12 +284,13 @@ export const airtableDataSource: DataSource = {
       method: "PATCH",
       body: JSON.stringify({ fields: fromCustomer(input) }),
     });
+    clearListCache(CUSTOMERS_TABLE);
     return toCustomer(data);
   },
 
   async listSuppliers() {
     if (!hasNewFields()) return [];
-    const records = await atList(SUPPLIERS_TABLE);
+    const records = await cachedList(SUPPLIERS_TABLE);
     return records.map(toSupplier);
   },
   async createSupplier(input) {
@@ -245,6 +298,7 @@ export const airtableDataSource: DataSource = {
       method: "POST",
       body: JSON.stringify({ fields: fromSupplier(input) }),
     });
+    clearListCache(SUPPLIERS_TABLE);
     return toSupplier(data);
   },
   async updateSupplier(id, input) {
@@ -252,9 +306,11 @@ export const airtableDataSource: DataSource = {
       method: "PATCH",
       body: JSON.stringify({ fields: fromSupplier(input) }),
     });
+    clearListCache(SUPPLIERS_TABLE);
     return toSupplier(data);
   },
   async deleteSupplier(id) {
     await at(`${SUPPLIERS_TABLE}/${id}`, { method: "DELETE" });
+    clearListCache(SUPPLIERS_TABLE);
   },
 };

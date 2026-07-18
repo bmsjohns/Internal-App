@@ -39,6 +39,13 @@ const COMING_SOON = [
   { label: "Schools", icon: '<path d="M3 9l9-5 9 5-9 5z"/><path d="M7 11v5c0 1 5 3 5 3s5-2 5-3v-5"/>' },
 ];
 
+// The sidebar re-renders on every navigation; without a throttle each click
+// hit /api/orders (two Airtable list reads) and quick navigation tripped
+// Airtable's 5 req/s limit. Module-level so the cache survives remounts;
+// counts refresh at most every 30s per tab.
+const ORDERS_REFRESH_MS = 30_000;
+let ordersCache: { at: number; orders: Order[] } | null = null;
+
 function roleLine(user: SessionUser): string {
   if (user.role !== "manager") return "Staff";
   if (user.managerLocations === "all") return "Manager · both venues";
@@ -54,9 +61,17 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
   const bare = pathname.startsWith("/callsheet") || /^\/events\/[^/]+\/print/.test(pathname);
 
   useEffect(() => {
+    if (ordersCache && Date.now() - ordersCache.at < ORDERS_REFRESH_MS) {
+      setOrders(ordersCache.orders);
+      return;
+    }
     fetch("/api/orders")
       .then((r) => (r.ok ? r.json() : { orders: [] }))
-      .then((d) => setOrders(d.orders ?? []))
+      .then((d) => {
+        const orders: Order[] = d.orders ?? [];
+        ordersCache = { at: Date.now(), orders };
+        setOrders(orders);
+      })
       .catch(() => {});
   }, [pathname]);
 

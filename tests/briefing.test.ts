@@ -63,6 +63,29 @@ describe("briefing dates", () => {
   });
 });
 
+describe("integration name matching (no-ids rule)", () => {
+  it("finds the Backstage base by exact case-insensitive name", async () => {
+    const { pickBackstageBase } = await import("@/lib/data/briefing-airtable");
+    expect(
+      pickBackstageBase([
+        { id: "app1", name: "Backstage Passes" },
+        { id: "app2", name: " backstage " },
+        { id: "app3", name: "Customer Orders" },
+      ])
+    ).toBe("app2");
+    expect(pickBackstageBase([{ id: "app1", name: "Orders" }])).toBeNull();
+  });
+
+  it("maps Deputy locations to venues by name", async () => {
+    const { venueForLocationName } = await import("@/lib/data/briefing-deputy");
+    expect(venueForLocationName("Prologue Books")).toBe("prologue");
+    expect(venueForLocationName("Weir Mill site")).toBe("prologue");
+    expect(venueForLocationName("Simply Books")).toBe("simply");
+    expect(venueForLocationName("Bramhall shop")).toBe("simply");
+    expect(venueForLocationName("Head Office")).toBeNull();
+  });
+});
+
 describe("events → briefing columns", () => {
   it("places events by Location, then venue name, else both", () => {
     expect(eventVenues(show({ location: "Prologue" }))).toEqual(["prologue"]);

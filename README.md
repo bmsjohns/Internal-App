@@ -386,13 +386,17 @@ was treated as authoritative and built as drawn.
 - **Wrap-ups + urgent alerts persist to the "Backstage" Airtable base**
   (general-purpose base for app features that need storage outside the
   Orders/Events bases; tables `Briefing Wrap-ups` and `Briefing Alerts` —
-  schema in `lib/data/briefing-airtable.ts`). Set
-  `BACKSTAGE_AIRTABLE_BASE_ID` (and give the Airtable token access to the
-  base) to switch it on; until then they fall back to in-memory mock
-  state, which resets on restart and won't persist on Vercel's serverless
-  runtime. Alert dismissal flags `Dismissed` rather than deleting, so the
-  base keeps an audit trail. Task ticks in mock mode are also in-memory;
-  once Deputy is connected they write back to Deputy instead.
+  schema in `lib/data/briefing-airtable.ts`). The base is discovered **by
+  name** through the meta API — no base-id env var per base (Ben's rule).
+  It switches on once `AIRTABLE_API_KEY` can see a base called
+  "Backstage" (add it to the token's access list; the token also needs
+  the `schema.bases:read` scope). `BACKSTAGE_AIRTABLE_BASE_ID` exists
+  only as an override. Until reachable, wrap-ups/alerts fall back to
+  in-memory mock state (resets on restart; not durable on Vercel).
+  Alert dismissal flags `Dismissed` rather than deleting, so the base
+  keeps an audit trail. Deputy→venue mapping likewise happens by
+  location *name* (Prologue/Weir Mill, Simply/Bramhall), with
+  `DEPUTY_LOCATION_ID_*` as numeric overrides only if a name mismatches.
 - **Deliberately not built** (spec §4/§7): no parallel in-app task system
   (Deputy's tasks or nothing), and no auto-post of wrap-ups to Slack —
   whether the Slack post continues is an open question below.

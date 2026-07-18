@@ -7,28 +7,28 @@ import { fmtMin } from "@/lib/briefing";
 // Ben, not something the app can provision (spec §2). Until the env vars
 // below are set, deputyConfigured() is false and the mock supplies data.
 //
+// The Deputy→venue mapping is derived BY NAME from Deputy's own location
+// (Company) records — "Prologue…" → prologue, "Simply…"/"…Bramhall" →
+// simply — so connecting Deputy needs no location IDs (Ben's rule).
+// DEPUTY_LOCATION_ID_PROLOGUE / DEPUTY_LOCATION_ID_SIMPLY exist only as
+// comma-separated overrides if the name matching ever guesses wrong.
+//
 // ⚠️ UNVERIFIED AGAINST A LIVE ACCOUNT: written to Deputy's documented
 // Resource API (POST /api/v1/resource/<Resource>/QUERY), but the exact
 // field names in this account (spec §9) must be confirmed on first connect.
 //
-//   DEPUTY_HOSTNAME          e.g. "simplybooks.eu.deputy.com"
-//   DEPUTY_API_TOKEN         permanent token (Deputy docs: "permanent token")
-//   DEPUTY_OPUNIT_PROLOGUE   OperationalUnit/Company ids, comma-separated
-//   DEPUTY_OPUNIT_SIMPLY     — the Deputy→venue mapping from spec §2.
+//   DEPUTY_HOSTNAME   e.g. "simplybooks.eu.deputy.com"
+//   DEPUTY_API_TOKEN  permanent token (Deputy docs: "permanent token")
 
-export const deputyConfigured = () =>
-  !!(
-    process.env.DEPUTY_HOSTNAME &&
-    process.env.DEPUTY_API_TOKEN &&
-    process.env.DEPUTY_OPUNIT_PROLOGUE &&
-    process.env.DEPUTY_OPUNIT_SIMPLY
-  );
+export const deputyConfigured = () => !!(process.env.DEPUTY_HOSTNAME && process.env.DEPUTY_API_TOKEN);
 
-const opUnits = (venue: VenueKey): string[] =>
-  (venue === "prologue" ? process.env.DEPUTY_OPUNIT_PROLOGUE : process.env.DEPUTY_OPUNIT_SIMPLY)!
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+/** Pure matcher, exported for tests: which venue a Deputy location is. */
+export function venueForLocationName(name: string): VenueKey | null {
+  const n = name.toLowerCase();
+  if (n.includes("prologue") || n.includes("weir mill")) return "prologue";
+  if (n.includes("simply") || n.includes("bramhall")) return "simply";
+  return null;
+}
 
 async function deputy(path: string, body?: unknown): Promise<any> {
   const res = await fetch(`https://${process.env.DEPUTY_HOSTNAME}/api/v1/${path}`, {
@@ -44,6 +44,41 @@ async function deputy(path: string, body?: unknown): Promise<any> {
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Location (Company) resolution — cached an hour; shops don't move.
+// ---------------------------------------------------------------------------
+type CompanyMap = Record<VenueKey, number[]>;
+let companyCache: { at: number; map: CompanyMap } | null = null;
+const COMPANY_CACHE_MS = 60 * 60 * 1000;
+
+function envOverride(venue: VenueKey): number[] | null {
+  const raw =
+    venue === "prologue" ? process.env.DEPUTY_LOCATION_ID_PROLOGUE : process.env.DEPUTY_LOCATION_ID_SIMPLY;
+  if (!raw) return null;
+  return raw.split(",").map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n));
+}
+
+async function companies(): Promise<CompanyMap> {
+  if (companyCache && Date.now() - companyCache.at < COMPANY_CACHE_MS) return companyCache.map;
+  const map: CompanyMap = { prologue: envOverride("prologue") ?? [], simply: envOverride("simply") ?? [] };
+  if (map.prologue.length === 0 || map.simply.length === 0) {
+    const rows: any[] = await deputy("resource/Company/QUERY", { search: {}, max: 100 });
+    for (const c of rows) {
+      const venue = venueForLocationName(c.CompanyName ?? "");
+      if (venue && !envOverride(venue)) map[venue].push(c.Id);
+    }
+    for (const venue of ["prologue", "simply"] as VenueKey[]) {
+      if (map[venue].length === 0) {
+        console.error(
+          `Briefing: no Deputy location matched "${venue}" by name — rename it in Deputy or set the DEPUTY_LOCATION_ID_* override`
+        );
+      }
+    }
+  }
+  companyCache = { at: Date.now(), map };
+  return map;
+}
+
 // Spec §2: don't hit Deputy live on every page load — cache for 10 minutes
 // and show "as of HH.MM". One entry per date; serverless instances each keep
 // their own cache, which only makes refreshes more frequent, never staler.
@@ -54,7 +89,7 @@ interface DayCache {
   roster: Record<VenueKey, ShiftEntry[]>;
   tasks: Record<VenueKey, BriefTask[]>;
 }
-const cache = new Map<string, DayCache>();
+const dayCache = new Map<string, DayCache>();
 
 const asOfNow = () =>
   new Intl.DateTimeFormat("en-GB", {
@@ -79,44 +114,51 @@ function tsToMin(ts: number): number {
 }
 
 async function fetchDay(date: string): Promise<DayCache> {
-  const hit = cache.get(date);
+  const hit = dayCache.get(date);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit;
+
+  const map = await companies();
+  const venueOfCompany = (id: number): VenueKey | null =>
+    map.prologue.includes(id) ? "prologue" : map.simply.includes(id) ? "simply" : null;
 
   const roster = { prologue: [], simply: [] } as Record<VenueKey, ShiftEntry[]>;
   const tasks = { prologue: [], simply: [] } as Record<VenueKey, BriefTask[]>;
 
-  for (const venue of ["prologue", "simply"] as VenueKey[]) {
-    const units = opUnits(venue);
-    // Roster records for the date + this venue's operational units, with the
-    // employee joined in for the display name (spec §2).
-    const rows: any[] = await deputy("resource/Roster/QUERY", {
-      search: {
-        date: { field: "Date", type: "eq", data: date },
-        unit: { field: "OperationalUnit", type: "in", data: units },
-      },
-      join: ["EmployeeObject", "OperationalUnitObject"],
-      max: 100,
+  // One roster query for the whole day; rows land in a venue via their
+  // operational unit's parent location (spec §2 mapping).
+  const rows: any[] = await deputy("resource/Roster/QUERY", {
+    search: { date: { field: "Date", type: "eq", data: date } },
+    join: ["EmployeeObject", "OperationalUnitObject"],
+    max: 500,
+  });
+  for (const r of rows) {
+    if (r.Open) continue; // open (unassigned) shifts aren't "who's on"
+    const companyId = r.OperationalUnitObject?.Company ?? r.Company;
+    const venue = typeof companyId === "number" ? venueOfCompany(companyId) : null;
+    if (!venue) continue;
+    roster[venue].push({
+      id: String(r.Id),
+      name: r.EmployeeObject?.DisplayName ?? r._DPMetaData?.EmployeeInfo?.DisplayName ?? "Unassigned",
+      role: r.OperationalUnitObject?.OperationalUnitName ?? "",
+      startMin: tsToMin(r.StartTime),
+      endMin: tsToMin(r.EndTime),
     });
-    roster[venue] = rows
-      .filter((r) => !r.Open) // open (unassigned) shifts aren't "who's on"
-      .map((r) => ({
-        id: String(r.Id),
-        name: r.EmployeeObject?.DisplayName ?? r._DPMetaData?.EmployeeInfo?.DisplayName ?? "Unassigned",
-        role: r.OperationalUnitObject?.OperationalUnitName ?? "",
-        startMin: tsToMin(r.StartTime),
-        endMin: tsToMin(r.EndTime),
-      }))
-      .sort((a, b) => a.startMin - b.startMin);
+  }
+  for (const venue of ["prologue", "simply"] as VenueKey[]) {
+    roster[venue].sort((a, b) => a.startMin - b.startMin);
+  }
 
-    // Spec §4: surface Deputy's own tasks rather than building a parallel
-    // system. Field support to confirm on first connect; if this account's
-    // Task records turn out not to be reliably date/location-tagged, drop
-    // the section back to mock/hidden rather than half-showing.
+  // Spec §4: surface Deputy's own tasks rather than building a parallel
+  // system. Field support to confirm on first connect; if this account's
+  // Task records turn out not to be reliably date/location-tagged, drop
+  // the section back to mock/hidden rather than half-showing.
+  for (const venue of ["prologue", "simply"] as VenueKey[]) {
+    if (map[venue].length === 0) continue;
     try {
       const rows: any[] = await deputy("resource/Task/QUERY", {
         search: {
           due: { field: "DueDate", type: "eq", data: date },
-          unit: { field: "Company", type: "in", data: units },
+          unit: { field: "Company", type: "in", data: map[venue] },
         },
         max: 100,
       });
@@ -137,7 +179,7 @@ async function fetchDay(date: string): Promise<DayCache> {
   }
 
   const entry: DayCache = { at: Date.now(), asOf: asOfNow(), roster, tasks };
-  cache.set(date, entry);
+  dayCache.set(date, entry);
   return entry;
 }
 
@@ -148,5 +190,5 @@ export async function getDeputyDay(date: string) {
 /** Write a completion back to Deputy and refresh the cached copy. */
 export async function setDeputyTaskDone(date: string, taskId: string, done: boolean): Promise<void> {
   await deputy(`resource/Task/${taskId}`, { Completed: done });
-  cache.delete(date);
+  dayCache.delete(date);
 }

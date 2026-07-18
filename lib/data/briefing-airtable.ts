@@ -6,40 +6,81 @@ import type { UrgentAlert, WrapUp } from "@/lib/briefing";
 // general-purpose "Backstage" base (NOT the Customer Orders or Events
 // bases), which future features can add their own tables to.
 //
-// Expected schema (created via the Airtable integration; field names are
-// load-bearing):
+// The base is found BY NAME through the Airtable meta API, so adding a new
+// base never means adding a new Vercel env var (Ben's rule). Requirements
+// on the app's AIRTABLE_API_KEY token: the Backstage base in its access
+// list, and the `schema.bases:read` scope (for the by-name lookup).
+// BACKSTAGE_AIRTABLE_BASE_ID remains as an optional override/escape hatch.
+//
+// Expected schema (field names are load-bearing):
 //   "Briefing Wrap-ups": Date (date, ISO) · Venue (single select:
 //     Prologue / Simply Books) · Headline · Body (long text) · Byline ·
 //     Posted At
 //   "Briefing Alerts": Text (primary) · Date (date, ISO) · Location
 //     (single select: Both / Prologue / Simply Books) · Dismissed (checkbox)
-//
-// Off until BACKSTAGE_AIRTABLE_BASE_ID is set (plus the shared
-// AIRTABLE_API_KEY, which must have this base in its scope). Until then the
-// in-memory mock store handles both — fine for dev, ephemeral in prod.
 
+const BASE_NAME = "backstage";
 const WRAPS_TABLE = "Briefing Wrap-ups";
 const ALERTS_TABLE = "Briefing Alerts";
 
-export const briefingAirtableConfigured = () =>
-  !!(process.env.AIRTABLE_API_KEY && process.env.BACKSTAGE_AIRTABLE_BASE_ID);
+export const briefingAirtableConfigured = () => !!process.env.AIRTABLE_API_KEY;
+
+/** Pure matcher, exported for tests: exact case-insensitive name match. */
+export const pickBackstageBase = (bases: { id: string; name: string }[]): string | null =>
+  bases.find((b) => b.name.trim().toLowerCase() === BASE_NAME)?.id ?? null;
+
+// Resolution cache — negative results too, so a missing base or a token
+// without meta scope costs one lookup per 10 minutes, not one per pageview.
+let baseCache: { id: string | null; at: number } | null = null;
+const BASE_CACHE_MS = 10 * 60 * 1000;
+
+const authHeaders = () => ({
+  Authorization: `Bearer ${process.env.AIRTABLE_API_KEY}`,
+  "Content-Type": "application/json",
+});
+
+async function resolveBaseId(): Promise<string | null> {
+  if (process.env.BACKSTAGE_AIRTABLE_BASE_ID) return process.env.BACKSTAGE_AIRTABLE_BASE_ID;
+  if (baseCache && Date.now() - baseCache.at < BASE_CACHE_MS) return baseCache.id;
+  let id: string | null = null;
+  try {
+    const bases: { id: string; name: string }[] = [];
+    let offset: string | undefined;
+    do {
+      const res = await fetch(
+        `https://api.airtable.com/v0/meta/bases${offset ? `?offset=${offset}` : ""}`,
+        { headers: authHeaders(), cache: "no-store" }
+      );
+      if (!res.ok) throw new Error(`meta/bases ${res.status}`);
+      const data = await res.json();
+      bases.push(...(data.bases ?? []));
+      offset = data.offset;
+    } while (offset);
+    id = pickBackstageBase(bases);
+    if (!id) console.error(`Briefing: no Airtable base named "Backstage" visible to this token`);
+  } catch (e) {
+    console.error("Briefing: Backstage base lookup failed (token may lack schema.bases:read)", e);
+  }
+  baseCache = { id, at: Date.now() };
+  return id;
+}
+
+/** True once the Backstage base is actually reachable. */
+export async function briefingAirtableReady(): Promise<boolean> {
+  return briefingAirtableConfigured() && (await resolveBaseId()) !== null;
+}
 
 const VENUE_NAME: Record<VenueKey, string> = { prologue: "Prologue", simply: "Simply Books" };
 const LOC_NAME: Record<UrgentAlert["loc"], string> = { ...VENUE_NAME, both: "Both" };
 
 async function at(path: string, init?: RequestInit): Promise<any> {
-  const res = await fetch(
-    `https://api.airtable.com/v0/${process.env.BACKSTAGE_AIRTABLE_BASE_ID}/${path}`,
-    {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${process.env.AIRTABLE_API_KEY}`,
-        "Content-Type": "application/json",
-        ...init?.headers,
-      },
-      cache: "no-store",
-    }
-  );
+  const baseId = await resolveBaseId();
+  if (!baseId) throw new Error("Backstage Airtable base not reachable");
+  const res = await fetch(`https://api.airtable.com/v0/${baseId}/${path}`, {
+    ...init,
+    headers: { ...authHeaders(), ...init?.headers },
+    cache: "no-store",
+  });
   if (!res.ok) throw new Error(`Airtable (Backstage base) ${res.status}: ${await res.text()}`);
   return res.json();
 }

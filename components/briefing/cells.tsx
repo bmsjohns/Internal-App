@@ -163,14 +163,18 @@ export function WrapCard({
   const [body, setBody] = useState("");
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   const save = async () => {
     if (!body.trim() || busy) return;
     setBusy(true);
+    setError("");
     try {
       await onSave(headline, body);
       setSaved(true);
       setWriting(false);
+    } catch {
+      setError("Couldn't save — check the connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -220,6 +224,7 @@ export function WrapCard({
                   placeholder="How did today go? Anything the morning team should know?"
                   className="rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-[13.5px] leading-relaxed text-cream placeholder:text-white/50"
                 />
+                {error && <div className="text-[12px] font-semibold text-[#FFD9D2]">{error}</div>}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={save}

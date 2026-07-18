@@ -5,7 +5,7 @@ import { mockBriefingSource } from "./briefing-mock";
 import { deputyConfigured, getDeputyDay, setDeputyTaskDone } from "./briefing-deputy";
 import { getSlackDay, slackConfigured } from "./briefing-slack";
 import {
-  briefingAirtableConfigured,
+  briefingAirtableReady,
   dismissAirtableAlert,
   getAirtableAlerts,
   getAirtableWraps,
@@ -23,26 +23,40 @@ import {
 const composedBriefingSource: BriefingDataSource = {
   async getDay(date: string): Promise<BriefingDay> {
     const day = await mockBriefingSource.getDay(date);
+    // Each overlay degrades independently: an integration hiccup falls that
+    // section back to mock data rather than 500ing the landing page.
     if (deputyConfigured()) {
-      const dep = await getDeputyDay(date);
-      day.rosterAsOf = dep.asOf;
-      for (const venue of ["prologue", "simply"] as const) {
-        day.venues[venue].roster = dep.roster[venue];
-        day.venues[venue].tasks = dep.tasks[venue];
+      try {
+        const dep = await getDeputyDay(date);
+        day.rosterAsOf = dep.asOf;
+        for (const venue of ["prologue", "simply"] as const) {
+          day.venues[venue].roster = dep.roster[venue];
+          day.venues[venue].tasks = dep.tasks[venue];
+        }
+      } catch (e) {
+        console.error("Briefing: Deputy overlay failed", e);
       }
     }
     if (slackConfigured()) {
       for (const venue of ["prologue", "simply"] as const) {
-        day.venues[venue].slack = await getSlackDay(date, venue);
+        try {
+          day.venues[venue].slack = await getSlackDay(date, venue);
+        } catch (e) {
+          console.error(`Briefing: Slack overlay failed (${venue})`, e);
+        }
       }
     }
-    if (briefingAirtableConfigured()) {
-      // The page shows the wrap COVERING the previous day.
-      const [wraps, alerts] = await Promise.all([getAirtableWraps(addDays(date, -1)), getAirtableAlerts(date)]);
-      for (const venue of ["prologue", "simply"] as const) {
-        day.venues[venue].wrap = wraps[venue] ?? null;
+    if (await briefingAirtableReady()) {
+      try {
+        // The page shows the wrap COVERING the previous day.
+        const [wraps, alerts] = await Promise.all([getAirtableWraps(addDays(date, -1)), getAirtableAlerts(date)]);
+        for (const venue of ["prologue", "simply"] as const) {
+          day.venues[venue].wrap = wraps[venue] ?? null;
+        }
+        day.alerts = alerts;
+      } catch (e) {
+        console.error("Briefing: Airtable overlay failed", e);
       }
-      day.alerts = alerts;
     }
     return day;
   },
@@ -52,16 +66,18 @@ const composedBriefingSource: BriefingDataSource = {
     return mockBriefingSource.setTaskDone(date, taskId, done);
   },
 
+  // Writes do NOT silently fall back once Airtable is the store — a wrap
+  // that only landed in ephemeral memory would look saved and then vanish.
   async saveWrap(date, venue, wrap) {
-    if (briefingAirtableConfigured()) return saveAirtableWrap(date, venue, wrap);
+    if (await briefingAirtableReady()) return saveAirtableWrap(date, venue, wrap);
     return mockBriefingSource.saveWrap(date, venue, wrap);
   },
   async postAlert(date, text, loc) {
-    if (briefingAirtableConfigured()) return postAirtableAlert(date, text, loc);
+    if (await briefingAirtableReady()) return postAirtableAlert(date, text, loc);
     return mockBriefingSource.postAlert(date, text, loc);
   },
   async dismissAlert(date, id) {
-    if (briefingAirtableConfigured()) return dismissAirtableAlert(id);
+    if (await briefingAirtableReady()) return dismissAirtableAlert(id);
     return mockBriefingSource.dismissAlert(date, id);
   },
 };

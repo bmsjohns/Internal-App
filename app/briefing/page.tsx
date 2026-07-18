@@ -165,11 +165,12 @@ export default function BriefingPage() {
 
   const saveWrap = useCallback(
     async (venueKey: VenueKey, headline: string, body: string) => {
-      await fetch("/api/briefing/wrap", {
+      const res = await fetch("/api/briefing/wrap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, venue: venueKey, headline, body }),
       });
+      if (!res.ok) throw new Error(`Save failed (HTTP ${res.status})`);
     },
     [date]
   );

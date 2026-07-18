@@ -3,11 +3,20 @@
 import { use, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { MembershipStatus } from "@/lib/types";
 import { CLUB_STATUS, MEMBERSHIP_STATUS, monthLabel, money, currentMonthKey, PAY_STATUS } from "@/lib/clubs";
 import { HUB_STATES } from "@/lib/hub";
 import SelectionOverlay from "@/components/clubs/SelectionOverlay";
 import { useClubsData } from "@/components/clubs/data";
 import { MemberAvatar, Tag, Toast, venueColor } from "@/components/clubs/ui";
+
+// Member list defaults to Active + Paused — Cancelled is available but
+// hidden until asked for, so the list reads as "who's actually in the club".
+const STATUS_FILTERS: { key: MembershipStatus; label: string }[] = [
+  { key: "active", label: "Active" },
+  { key: "paused", label: "Paused" },
+  { key: "cancelled", label: "Cancelled" },
+];
 
 // Club detail (spec B3): member list with subscription + payment status,
 // meeting info, this month's pick (status REFLECTED from its hub order) and
@@ -18,10 +27,19 @@ export default function ClubDetailPage({ params }: { params: Promise<{ id: strin
   const { data, error, refresh } = useClubsData();
   const [picking, setPicking] = useState(false);
   const [toast, setToast] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Set<MembershipStatus>>(new Set(["active", "paused"]));
 
   const club = data?.clubs.find((c) => c.id === id);
   const subs = useMemo(() => data?.memberships.filter((s) => s.clubId === id) ?? [], [data, id]);
+  const filteredSubs = useMemo(() => subs.filter((s) => statusFilter.has(s.status)), [subs, statusFilter]);
   const active = subs.filter((s) => s.status === "active");
+  const toggleStatusFilter = (key: MembershipStatus) =>
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const month = currentMonthKey();
   const selections = useMemo(
     () => (data?.selections.filter((s) => s.clubId === id) ?? []).sort((a, b) => (a.month < b.month ? 1 : -1)),
@@ -68,7 +86,7 @@ export default function ClubDetailPage({ params }: { params: Promise<{ id: strin
                 {club.cadence}
               </span>
               <span className="tabular-nums">
-                {active.length} active · {subs.length} total
+                {active.length} active{club.memberCapacity != null ? ` · capacity ${club.memberCapacity}` : ""}
               </span>
               <Tag {...CLUB_STATUS[club.status]} />
               {club.stripePriceId && <span className="tabular-nums text-stone">Stripe {club.stripePriceId}</span>}
@@ -109,9 +127,32 @@ export default function ClubDetailPage({ params }: { params: Promise<{ id: strin
 
       <div className="grid items-start gap-6 px-5 py-6 sm:px-8 lg:grid-cols-[1fr_320px]">
         <div>
-          <div className="mb-2.5 flex items-center justify-between">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
             <h3 className="m-0 font-display text-[22px]">Members</h3>
-            <span className="text-xs text-stone">{subs.length} people</span>
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1.5">
+                {STATUS_FILTERS.map((opt) => {
+                  const on = statusFilter.has(opt.key);
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => toggleStatusFilter(opt.key)}
+                      className="cursor-pointer rounded-full border px-2.5 py-1 text-[11.5px] font-semibold"
+                      style={
+                        on
+                          ? { borderColor: vc, background: vc, color: "#fff" }
+                          : { borderColor: "var(--color-cream-2)", background: "#fff", color: "var(--color-charcoal)" }
+                      }
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="text-xs text-stone">
+                {filteredSubs.length} of {subs.length}
+              </span>
+            </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-cream-2 bg-white">
             <table className="w-full border-collapse text-[13.5px]">
@@ -125,14 +166,14 @@ export default function ClubDetailPage({ params }: { params: Promise<{ id: strin
                 </tr>
               </thead>
               <tbody>
-                {subs.length === 0 && (
+                {filteredSubs.length === 0 && (
                   <tr>
                     <td colSpan={5} className="px-5 py-6 text-center text-sm text-stone">
-                      No members yet.
+                      {subs.length === 0 ? "No members yet." : "No members match this filter."}
                     </td>
                   </tr>
                 )}
-                {subs.map((s) => {
+                {filteredSubs.map((s) => {
                   const m = memberOf(s.memberId);
                   if (!m) return null;
                   return (

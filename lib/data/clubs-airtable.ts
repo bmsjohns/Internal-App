@@ -81,6 +81,7 @@ const toClub = (r: any): Club => {
     cadence: prettyCadence(f["Session Time"] ?? ""),
     stripePriceId: "", // derived from members' Plan when needed (payment-link model)
     status: "active", // the base's Status field is the untouched Airtable default — meaningless
+    memberCapacity: f["Member Capacity"] != null && f["Member Capacity"] !== "" ? Number(f["Member Capacity"]) : null,
   };
 };
 

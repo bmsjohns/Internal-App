@@ -42,20 +42,22 @@ const NOTES = [
 ];
 
 const CLUB_SEED: Omit<Club, "kind">[] = [
-  { id: "clb1", name: "First Chapter Club", location: "Prologue", description: "", genre: "Literary Fiction", cadence: "First Tuesday · monthly", stripePriceId: "price_1LaQ", status: "active" },
-  { id: "clb2", name: "Killer Lines", location: "Prologue", description: "", genre: "Crime & Thriller", cadence: "Second Thursday · monthly", stripePriceId: "price_1LbR", status: "active" },
-  { id: "clb3", name: "Book & Bottle", location: "Prologue", description: "", genre: "Contemporary", cadence: "Last Friday · monthly", stripePriceId: "price_1LcS", status: "active" },
-  { id: "clb4", name: "Far Horizons SFF", location: "Prologue", description: "", genre: "Sci-Fi & Fantasy", cadence: "Third Wednesday · monthly", stripePriceId: "price_1LdT", status: "active" },
-  { id: "clb5", name: "The Non-Fiction Table", location: "Prologue", description: "", genre: "Non-fiction", cadence: "First Monday · monthly", stripePriceId: "price_1LeU", status: "active" },
-  { id: "clb6", name: "Verse & Voice", location: "Prologue", description: "", genre: "Poetry", cadence: "Fortnightly · Sundays", stripePriceId: "price_1LfV", status: "active" },
-  { id: "clb7", name: "Translated Fiction", location: "Prologue", description: "", genre: "Translated", cadence: "Second Tuesday · monthly", stripePriceId: "price_1LgW", status: "active" },
-  { id: "clb8", name: "Debut Table", location: "Prologue", description: "", genre: "Debut Fiction", cadence: "Third Monday · monthly", stripePriceId: "price_1LhX", status: "paused" },
-  { id: "clb9", name: "Bramhall Readers", location: "Simply Books", description: "", genre: "Literary Fiction", cadence: "First Wednesday · monthly", stripePriceId: "price_1LiY", status: "active" },
-  { id: "clb10", name: "Cosy Crime", location: "Simply Books", description: "", genre: "Crime & Thriller", cadence: "Second Monday · monthly", stripePriceId: "price_1LjZ", status: "active" },
-  { id: "clb11", name: "Simply Classics", location: "Simply Books", description: "", genre: "Classics", cadence: "Last Tuesday · monthly", stripePriceId: "price_1Lk1", status: "active" },
-  { id: "clb12", name: "Young Readers (YA)", location: "Simply Books", description: "", genre: "Young Adult", cadence: "Fortnightly · Saturdays", stripePriceId: "price_1Ll2", status: "active" },
-  { id: "clb13", name: "Feel-Good Fiction", location: "Simply Books", description: "", genre: "Romance", cadence: "Third Thursday · monthly", stripePriceId: "price_1Lm3", status: "active" },
-  { id: "clb14", name: "History & Ideas", location: "Simply Books", description: "", genre: "Non-fiction", cadence: "First Friday · monthly", stripePriceId: "price_1Ln4", status: "inactive" },
+  { id: "clb1", name: "First Chapter Club", location: "Prologue", description: "", genre: "Literary Fiction", cadence: "First Tuesday · monthly", stripePriceId: "price_1LaQ", status: "active", memberCapacity: 14 },
+  { id: "clb2", name: "Killer Lines", location: "Prologue", description: "", genre: "Crime & Thriller", cadence: "Second Thursday · monthly", stripePriceId: "price_1LbR", status: "active", memberCapacity: 12 },
+  { id: "clb3", name: "Book & Bottle", location: "Prologue", description: "", genre: "Contemporary", cadence: "Last Friday · monthly", stripePriceId: "price_1LcS", status: "active", memberCapacity: 15 },
+  // Deliberately unset — demonstrates the "no capacity set" fallback.
+  { id: "clb4", name: "Far Horizons SFF", location: "Prologue", description: "", genre: "Sci-Fi & Fantasy", cadence: "Third Wednesday · monthly", stripePriceId: "price_1LdT", status: "active", memberCapacity: null },
+  { id: "clb5", name: "The Non-Fiction Table", location: "Prologue", description: "", genre: "Non-fiction", cadence: "First Monday · monthly", stripePriceId: "price_1LeU", status: "active", memberCapacity: 13 },
+  { id: "clb6", name: "Verse & Voice", location: "Prologue", description: "", genre: "Poetry", cadence: "Fortnightly · Sundays", stripePriceId: "price_1LfV", status: "active", memberCapacity: 10 },
+  { id: "clb7", name: "Translated Fiction", location: "Prologue", description: "", genre: "Translated", cadence: "Second Tuesday · monthly", stripePriceId: "price_1LgW", status: "active", memberCapacity: 14 },
+  { id: "clb8", name: "Debut Table", location: "Prologue", description: "", genre: "Debut Fiction", cadence: "Third Monday · monthly", stripePriceId: "price_1LhX", status: "paused", memberCapacity: 14 },
+  { id: "clb9", name: "Bramhall Readers", location: "Simply Books", description: "", genre: "Literary Fiction", cadence: "First Wednesday · monthly", stripePriceId: "price_1LiY", status: "active", memberCapacity: 16 },
+  { id: "clb10", name: "Cosy Crime", location: "Simply Books", description: "", genre: "Crime & Thriller", cadence: "Second Monday · monthly", stripePriceId: "price_1LjZ", status: "active", memberCapacity: 15 },
+  { id: "clb11", name: "Simply Classics", location: "Simply Books", description: "", genre: "Classics", cadence: "Last Tuesday · monthly", stripePriceId: "price_1Lk1", status: "active", memberCapacity: 15 },
+  // Deliberately unset — demonstrates the "no capacity set" fallback.
+  { id: "clb12", name: "Young Readers (YA)", location: "Simply Books", description: "", genre: "Young Adult", cadence: "Fortnightly · Saturdays", stripePriceId: "price_1Ll2", status: "active", memberCapacity: null },
+  { id: "clb13", name: "Feel-Good Fiction", location: "Simply Books", description: "", genre: "Romance", cadence: "Third Thursday · monthly", stripePriceId: "price_1Lm3", status: "active", memberCapacity: 10 },
+  { id: "clb14", name: "History & Ideas", location: "Simply Books", description: "", genre: "Non-fiction", cadence: "First Friday · monthly", stripePriceId: "price_1Ln4", status: "inactive", memberCapacity: 12 },
 ];
 
 // Book pool for seeded selections — publisher ids match hub-mock's Publishers.

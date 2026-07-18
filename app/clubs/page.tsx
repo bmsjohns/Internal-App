@@ -32,12 +32,10 @@ export default function ClubsPage() {
 
   const counts = useMemo(() => {
     const active = new Map<string, number>();
-    const total = new Map<string, number>();
     for (const s of data?.memberships ?? []) {
-      total.set(s.clubId, (total.get(s.clubId) ?? 0) + 1);
       if (s.status === "active") active.set(s.clubId, (active.get(s.clubId) ?? 0) + 1);
     }
-    return { active: (c: Club) => active.get(c.id) ?? 0, total: (c: Club) => total.get(c.id) ?? 0 };
+    return { active: (c: Club) => active.get(c.id) ?? 0 };
   }, [data]);
 
   const filterGroups: FilterGroup<Club>[] = [
@@ -147,7 +145,7 @@ export default function ClubsPage() {
               render: (c) => (
                 <span className="tabular-nums">
                   <span className="text-[15px] font-semibold">{counts.active(c)}</span>
-                  <span className="text-xs text-stone"> / {counts.total(c)}</span>
+                  <span className="text-xs text-stone"> / {c.memberCapacity ?? "—"}</span>
                 </span>
               ),
             },
@@ -170,7 +168,7 @@ export default function ClubsPage() {
               </div>
               <div className="flex items-center justify-between text-[13px]">
                 <span>
-                  <strong className="tabular-nums">{counts.active(c)}</strong> active / {counts.total(c)}
+                  <strong className="tabular-nums">{counts.active(c)}</strong> active / {c.memberCapacity ?? "—"}
                 </span>
                 {pickCell(c)}
               </div>
@@ -179,8 +177,8 @@ export default function ClubsPage() {
           empty={{ title: "No clubs match.", body: "Try a different status or clear your search." }}
           exportCsv={{
             filename: "clubs.csv",
-            header: ["Club", "Venue", "Genre", "Cadence", "Active", "Total", "This month"],
-            row: (c) => [c.name, c.location, c.genre, c.cadence, counts.active(c), counts.total(c), selOf(c)?.title ?? "Not yet picked"],
+            header: ["Club", "Venue", "Genre", "Cadence", "Active", "Capacity", "This month"],
+            row: (c) => [c.name, c.location, c.genre, c.cadence, counts.active(c), c.memberCapacity ?? "", selOf(c)?.title ?? "Not yet picked"],
           }}
           footerLabel={(n, total) => `${n} of ${total} clubs`}
           footerRight="Clubs · Members standalone from Customers"

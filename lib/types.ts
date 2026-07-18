@@ -291,6 +291,10 @@ export interface Club {
   cadence: string;
   stripePriceId: string;
   status: ClubStatus;
+  /** Manually-set target size, e.g. for room capacity. Going over is fine
+   *  (a club can squeeze someone in) — this is guidance, not a hard cap.
+   *  null when nobody's set it yet. */
+  memberCapacity: number | null;
 }
 
 export type ClubInput = Omit<Club, "id">;

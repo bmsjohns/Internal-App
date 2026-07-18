@@ -93,6 +93,20 @@ describe("integration name matching (no-ids rule)", () => {
     expect(venueForCompany({ CompanyName: "Warehouse" })).toBeNull();
   });
 
+  it("composes opening hours and closures for display", async () => {
+    const { formatHours, weekdayOf } = await import("@/lib/data/briefing-hours");
+    expect(weekdayOf("2026-07-18")).toBe("Saturday");
+    expect(formatHours({ Open: "9am", Close: "5.30pm", Note: "Click & collect until 5pm" })).toEqual({
+      hours: "9am – 5.30pm",
+      note: "Click & collect until 5pm",
+    });
+    expect(formatHours({ Closed: true, Note: "Christmas Day" })).toEqual({
+      hours: "Closed today",
+      note: "Christmas Day",
+    });
+    expect(formatHours({ Open: "8am", Close: "1am", Note: "Late — author event" }).hours).toBe("8am – 1am");
+  });
+
   it("filters Airtable by formatted date, not raw string equality", async () => {
     const { dateEq } = await import("@/lib/data/briefing-airtable");
     // The raw-string form (`{Date}='...'`) silently matches nothing; the

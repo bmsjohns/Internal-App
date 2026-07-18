@@ -85,6 +85,10 @@ async function at(path: string, init?: RequestInit): Promise<any> {
   return res.json();
 }
 
+/** Shared Backstage-base request for sibling modules (e.g. opening hours),
+ *  so base-name resolution and auth live in one place. */
+export const backstageApi = (path: string, init?: RequestInit) => at(path, init);
+
 // Airtable gotcha: a date field compared to a string with `=` (e.g.
 // `{Date}='2026-07-18'`) matches NOTHING — {Date} evaluates to a datetime,
 // so the equality is always false and every read comes back empty even

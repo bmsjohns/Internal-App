@@ -12,6 +12,7 @@ import {
   postAirtableAlert,
   saveAirtableWrap,
 } from "./briefing-airtable";
+import { getOpeningHours } from "./briefing-hours";
 
 // Composition, not a hard switch: unlike DATA_SOURCE (one base, one flag),
 // the briefing pulls from several systems that come online independently —
@@ -48,10 +49,16 @@ const composedBriefingSource: BriefingDataSource = {
     }
     if (await briefingAirtableReady()) {
       try {
-        // The page shows the wrap COVERING the previous day.
-        const [wraps, alerts] = await Promise.all([getAirtableWraps(addDays(date, -1)), getAirtableAlerts(date)]);
+        // The page shows the wrap COVERING the previous day. Opening hours
+        // resolve regular pattern + date overrides from the same base.
+        const [wraps, alerts, hours] = await Promise.all([
+          getAirtableWraps(addDays(date, -1)),
+          getAirtableAlerts(date),
+          getOpeningHours(date),
+        ]);
         for (const venue of ["prologue", "simply"] as const) {
           day.venues[venue].wrap = wraps[venue] ?? null;
+          if (hours?.[venue]) day.venues[venue].opening = hours[venue]!;
         }
         day.alerts = alerts;
       } catch (e) {

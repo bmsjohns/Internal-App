@@ -400,6 +400,13 @@ was treated as authoritative and built as drawn.
 - **Deliberately not built** (spec §4/§7): no parallel in-app task system
   (Deputy's tasks or nothing), and no auto-post of wrap-ups to Slack —
   whether the Slack post continues is an open question below.
+- **Opening hours** come from the Backstage base too — a regular weekly
+  pattern (`Opening Hours`: venue × weekday, with an Open/Close/Closed +
+  note) plus a `Hours Overrides` table for date-specific exceptions (a
+  late event night, or a full closure like Christmas; venue "Both"
+  applies to both). Resolution: override for the date wins, else that
+  weekday's regular row, else the built-in mock fallback. Editable in the
+  base, no deploy needed. Logic in `lib/data/briefing-hours.ts`.
 - Staff **milestones/birthdays** (§6) currently come from mock data; the
   Deputy Employee fields (start date / DOB) need checking before wiring
   them live, plus the privacy note in the spec (show "birthday today",

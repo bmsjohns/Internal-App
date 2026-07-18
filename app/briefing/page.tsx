@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { VenueKey } from "@/lib/config";
-import type { BriefingDay, BriefingEvent, UrgentAlert, VenueBriefing, WrapDraft } from "@/lib/briefing";
+import type { AlertLevel, BriefingDay, BriefingEvent, UrgentAlert, VenueBriefing, WrapDraft } from "@/lib/briefing";
 import {
+  ALERT_LEVEL_ORDER,
+  ALERT_LEVELS,
   ALERT_THEME,
   BRIEFING_COLUMNS,
   BRIEFING_VENUES,
@@ -53,6 +55,8 @@ const WEATHER_ICONS: Record<string, string> = {
 };
 
 const ICON_ALERT = '<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17v0"/>';
+const ICON_PLUS = '<path d="M12 5v14M5 12h14"/>';
+const ICON_INFO = '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v0"/>';
 const ICON_CLOSE = '<path d="M6 6l12 12M18 6L6 18"/>';
 const ICON_CHAT = '<path d="M4 5h16v11H9l-4 4v-4H4z"/>';
 const ICON_CAKE =
@@ -78,8 +82,11 @@ export default function BriefingPage() {
   const [nowMin, setNowMin] = useState(() => nowMinLondon());
   const [slackSeen, setSlackSeen] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [alertMenu, setAlertMenu] = useState(false);
   const [draft, setDraft] = useState("");
   const [draftLoc, setDraftLoc] = useState<UrgentAlert["loc"]>("both");
+  const [draftLevel, setDraftLevel] = useState<AlertLevel>("urgent");
+  const [draftUntil, setDraftUntil] = useState("");
 
   const today = todayLondon();
   const date = addDays(today, offset);
@@ -147,18 +154,27 @@ export default function BriefingPage() {
     [date]
   );
 
+  const openCompose = (level: AlertLevel) => {
+    setDraftLevel(level);
+    setAlertMenu(false);
+    setAdding(true);
+  };
+
   const postAlert = async () => {
     const text = draft.trim();
     if (!text) return;
+    const until = draftUntil && draftUntil > date ? draftUntil : null;
     setDraft("");
+    setDraftUntil("");
     setAdding(false);
     const res = await fetch("/api/briefing/alerts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, text, loc: draftLoc }),
+      body: JSON.stringify({ date, text, loc: draftLoc, level: draftLevel, until }),
     });
     if (res.ok) {
       const { alert } = await res.json();
+      // Posted against the day being viewed, so it always covers it.
       setData((d) => d && { ...d, day: { ...d.day, alerts: [...d.day.alerts, alert] } });
     }
   };
@@ -255,18 +271,47 @@ export default function BriefingPage() {
                 {data?.day.rosterAsOf ? `Synced ${data.day.rosterAsOf}` : "Live"}
               </div>
               {canPostAlert && (
-                <button
-                  onClick={() => setAdding((a) => !a)}
-                  title="Post urgent alert"
-                  aria-label="Post urgent alert"
-                  className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
-                    adding
-                      ? "border-[#B0812F] bg-[#FBF3E6] text-[#8A5A12]"
-                      : "border-cream-2 bg-white text-stone hover:border-[#C99A3E] hover:text-[#8A5A12]"
-                  }`}
-                >
-                  {ic(ICON_ALERT, 15)}
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setAlertMenu((m) => !m)}
+                    title="Post an alert"
+                    aria-label="Post an alert"
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                      adding || alertMenu
+                        ? "border-[#B0812F] bg-[#FBF3E6] text-[#8A5A12]"
+                        : "border-cream-2 bg-white text-stone hover:border-[#C99A3E] hover:text-[#8A5A12]"
+                    }`}
+                  >
+                    {ic(ICON_PLUS, 16)}
+                  </button>
+                  {alertMenu && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setAlertMenu(false)} />
+                      <div className="absolute right-0 z-20 mt-1.5 w-52 overflow-hidden rounded-lg border border-cream-2 bg-white p-1 shadow-lg">
+                        <button
+                          onClick={() => openCompose("urgent")}
+                          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-cream"
+                        >
+                          <span className="flex text-[#B0812F]">{ic(ICON_ALERT, 15)}</span>
+                          <span>
+                            <span className="block text-[13px] font-semibold text-ink">Urgent alert</span>
+                            <span className="block text-[11px] text-stone">Read before shift</span>
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => openCompose("heads-up")}
+                          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-cream"
+                        >
+                          <span className="flex text-[#3D6E96]">{ic(ICON_INFO, 15)}</span>
+                          <span>
+                            <span className="block text-[13px] font-semibold text-ink">Heads-up</span>
+                            <span className="block text-[11px] text-stone">Good to know today</span>
+                          </span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -364,96 +409,136 @@ export default function BriefingPage() {
           </div>
         )}
 
-        {/* ============ urgent alerts ============ */}
-        {/* Compose panel opens from the small alert control by the weather
-            (managers only); the display bar below is visible to everyone. */}
-        {canPostAlert && adding && (
-          <div className="mb-3.5 rounded-[10px] border-[1.5px] border-[#E7D3A9] bg-[#FBF3E6] px-4 py-3.5">
-            <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[.14em] text-[#8A5A12]">
-              New urgent alert
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && postAlert()}
-                placeholder="Type an urgent note for the team…"
-                className="min-w-[220px] flex-1 rounded-lg border border-[#E7D3A9] bg-white px-3 py-2.5 text-[13.5px] text-ink"
-              />
-              <div className="inline-flex rounded-lg border border-[#E7D3A9] bg-white p-[3px]">
-                {(
-                  [
-                    { key: "both", label: "Both" },
-                    { key: "prologue", label: "Prologue" },
-                    { key: "simply", label: "Simply Books" },
-                  ] as const
-                ).map((o) => (
-                  <button
-                    key={o.key}
-                    onClick={() => setDraftLoc(o.key)}
-                    className={`whitespace-nowrap rounded-md px-[11px] py-[7px] text-xs font-semibold ${
-                      draftLoc === o.key ? "bg-[#B0812F] text-white" : "text-stone"
-                    }`}
-                  >
-                    {o.label}
-                  </button>
-                ))}
+        {/* ============ alerts ============ */}
+        {/* Compose opens from the + control by the weather (managers only,
+            level chosen from its dropdown); the bars below show to everyone. */}
+        {canPostAlert && adding && (() => {
+          const lv = ALERT_LEVELS[draftLevel];
+          return (
+            <div
+              className="mb-3.5 rounded-[10px] border-[1.5px] px-4 py-3.5"
+              style={{ borderColor: lv.border, background: lv.bg }}
+            >
+              <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: lv.label }}>
+                New {draftLevel === "urgent" ? "urgent alert" : "heads-up"}
               </div>
-              <button
-                onClick={postAlert}
-                className="rounded-lg border-[1.5px] border-[#B0812F] bg-[#B0812F] px-4 py-2.5 text-[13px] font-semibold text-white"
-              >
-                Post
-              </button>
-              <button
-                onClick={() => setAdding(false)}
-                className="rounded-lg border border-cream-2 bg-white px-3.5 py-2.5 text-[13px] font-semibold text-charcoal"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-        {visibleAlerts.length > 0 && (
-          <div className="mb-3.5 rounded-[10px] border-[1.5px] border-[#E7D3A9] bg-[#FBF3E6] px-4 py-3.5">
-            <div className="mb-2.5 flex items-center gap-2.5">
-              <span className="flex text-[#B0812F]">{ic(ICON_ALERT, 16)}</span>
-              <span className="text-[11px] font-bold uppercase tracking-[.14em] text-[#8A5A12]">
-                Urgent — read before shift
-              </span>
-            </div>
-            <div className="flex flex-col gap-2">
-              {visibleAlerts.map((a) => {
-                const th = ALERT_THEME[a.loc];
-                return (
-                  <div
-                    key={a.id}
-                    className="flex items-start gap-[11px] rounded-lg border border-cream-2 bg-white px-3 py-[11px]"
-                    style={{ borderLeft: `4px solid ${th.c}` }}
-                  >
-                    <span className="mt-[5px] h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: th.c }} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[13.5px] font-semibold leading-[1.35] text-ink">{a.text}</div>
-                      <span
-                        className="mt-1.5 inline-flex items-center rounded-full px-[9px] py-0.5 text-[10px] font-bold uppercase tracking-[.06em]"
-                        style={{ color: th.c, background: th.t }}
-                      >
-                        {a.loc === "both" ? "Both venues" : BRIEFING_VENUES[a.loc].name}
-                      </span>
-                    </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && postAlert()}
+                  placeholder={draftLevel === "urgent" ? "Type an urgent note for the team…" : "Something to be aware of today…"}
+                  className="min-w-[220px] flex-1 rounded-lg border bg-white px-3 py-2.5 text-[13.5px] text-ink"
+                  style={{ borderColor: lv.border }}
+                />
+                <div className="inline-flex rounded-lg border bg-white p-[3px]" style={{ borderColor: lv.border }}>
+                  {(
+                    [
+                      { key: "both", label: "Both" },
+                      { key: "prologue", label: "Prologue" },
+                      { key: "simply", label: "Simply Books" },
+                    ] as const
+                  ).map((o) => (
                     <button
-                      onClick={() => dismissAlert(a.id)}
-                      aria-label="Dismiss alert"
-                      className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md text-stone hover:bg-ink/5 hover:text-ink"
+                      key={o.key}
+                      onClick={() => setDraftLoc(o.key)}
+                      className="whitespace-nowrap rounded-md px-[11px] py-[7px] text-xs font-semibold"
+                      style={
+                        draftLoc === o.key
+                          ? { background: lv.accent, color: "#fff" }
+                          : { color: "var(--color-stone)" }
+                      }
                     >
-                      {ic(ICON_CLOSE, 16)}
+                      {o.label}
                     </button>
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+                <label className="flex items-center gap-1.5 text-[11.5px] text-stone">
+                  until
+                  <input
+                    type="date"
+                    value={draftUntil}
+                    min={addDays(date, 1)}
+                    onChange={(e) => setDraftUntil(e.target.value)}
+                    title="Optional — leave blank for today only"
+                    className="rounded-lg border bg-white px-2 py-2 text-[12.5px] text-ink"
+                    style={{ borderColor: lv.border }}
+                  />
+                </label>
+                <button
+                  onClick={postAlert}
+                  className="rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white"
+                  style={{ background: lv.accent }}
+                >
+                  Post
+                </button>
+                <button
+                  onClick={() => setAdding(false)}
+                  className="rounded-lg border border-cream-2 bg-white px-3.5 py-2.5 text-[13px] font-semibold text-charcoal"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
+        {ALERT_LEVEL_ORDER.map((level) => {
+          const items = visibleAlerts.filter((a) => a.level === level);
+          if (items.length === 0) return null;
+          const lv = ALERT_LEVELS[level];
+          return (
+            <div
+              key={level}
+              className="mb-3.5 rounded-[10px] border-[1.5px] px-4 py-3.5"
+              style={{ borderColor: lv.border, background: lv.bg }}
+            >
+              <div className="mb-2.5 flex items-center gap-2.5">
+                <span className="flex" style={{ color: lv.accent }}>
+                  {ic(level === "urgent" ? ICON_ALERT : ICON_INFO, 16)}
+                </span>
+                <span className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: lv.label }}>
+                  {lv.title}
+                </span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {items.map((a) => {
+                  const th = ALERT_THEME[a.loc];
+                  const runsOn = a.until && a.until > date;
+                  return (
+                    <div
+                      key={a.id}
+                      className="flex items-start gap-[11px] rounded-lg border border-cream-2 bg-white px-3 py-[11px]"
+                      style={{ borderLeft: `4px solid ${th.c}` }}
+                    >
+                      <span className="mt-[5px] h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: th.c }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13.5px] font-semibold leading-[1.35] text-ink">{a.text}</div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <span
+                            className="inline-flex items-center rounded-full px-[9px] py-0.5 text-[10px] font-bold uppercase tracking-[.06em]"
+                            style={{ color: th.c, background: th.t }}
+                          >
+                            {a.loc === "both" ? "Both venues" : BRIEFING_VENUES[a.loc].name}
+                          </span>
+                          {runsOn && (
+                            <span className="text-[11px] text-stone">until {dateParts(a.until!).dmShort}</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => dismissAlert(a.id)}
+                        aria-label="Dismiss alert"
+                        className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md text-stone hover:bg-ink/5 hover:text-ink"
+                      >
+                        {ic(ICON_CLOSE, 16)}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
 
         {/* ============ slack notification ============ */}
         {!slackSeen && totalNew > 0 && (

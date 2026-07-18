@@ -118,6 +118,27 @@ describe("integration name matching (no-ids rule)", () => {
     expect(formatHours({ Open: "8am", Close: "1am", Note: "Late — author event" }).hours).toBe("8am – 1am");
   });
 
+  it("shows a multi-day alert across its whole range, with its level", async () => {
+    const { mockBriefingSource } = await import("@/lib/data/briefing-mock");
+    const posted = await mockBriefingSource.postAlert(
+      "2026-09-01",
+      "Stocktake week — expect gaps on shelves",
+      "simply",
+      "heads-up",
+      "2026-09-03"
+    );
+    expect(posted.level).toBe("heads-up");
+
+    const has = async (d: string) => (await mockBriefingSource.getDay(d)).alerts.some((a) => a.id === posted.id);
+    expect(await has("2026-08-31")).toBe(false); // before the range
+    expect(await has("2026-09-01")).toBe(true); // first day
+    expect(await has("2026-09-03")).toBe(true); // last day (inclusive)
+    expect(await has("2026-09-04")).toBe(false); // after the range
+
+    await mockBriefingSource.dismissAlert("2026-09-02", posted.id);
+    expect(await has("2026-09-02")).toBe(false); // dismiss clears the whole run
+  });
+
   it("filters Airtable by formatted date, not raw string equality", async () => {
     const { dateEq } = await import("@/lib/data/briefing-airtable");
     // The raw-string form (`{Date}='...'`) silently matches nothing; the

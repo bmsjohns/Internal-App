@@ -1,5 +1,5 @@
 import type { VenueKey } from "@/lib/config";
-import type { BriefingDay, UrgentAlert, WrapUp } from "@/lib/briefing";
+import type { AlertLevel, BriefingDay, UrgentAlert, WrapUp } from "@/lib/briefing";
 
 // Daily Briefing data seam, same rules as lib/data/source.ts: the page and
 // API routes only ever talk to this interface. The default implementation is
@@ -19,6 +19,14 @@ export interface BriefingDataSource {
    *  keeps it off the next day's briefing until published. */
   saveWrap(date: string, venue: VenueKey, wrap: WrapUp, draft: boolean): Promise<void>;
 
-  postAlert(date: string, text: string, loc: UrgentAlert["loc"]): Promise<UrgentAlert>;
+  /** Post an alert. `until` (inclusive YYYY-MM-DD) runs it multi-day from
+   *  `date`; omit for a single day. `level` picks urgent vs heads-up. */
+  postAlert(
+    date: string,
+    text: string,
+    loc: UrgentAlert["loc"],
+    level: AlertLevel,
+    until?: string | null
+  ): Promise<UrgentAlert>;
   dismissAlert(date: string, alertId: string): Promise<void>;
 }

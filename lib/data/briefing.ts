@@ -90,9 +90,9 @@ const composedBriefingSource: BriefingDataSource = {
     if (await briefingAirtableReady()) return saveAirtableWrap(date, venue, wrap, draft);
     return mockBriefingSource.saveWrap(date, venue, wrap, draft);
   },
-  async postAlert(date, text, loc) {
-    if (await briefingAirtableReady()) return postAirtableAlert(date, text, loc);
-    return mockBriefingSource.postAlert(date, text, loc);
+  async postAlert(date, text, loc, level, until) {
+    if (await briefingAirtableReady()) return postAirtableAlert(date, text, loc, level, until);
+    return mockBriefingSource.postAlert(date, text, loc, level, until);
   },
   async dismissAlert(date, id) {
     if (await briefingAirtableReady()) return dismissAirtableAlert(id);

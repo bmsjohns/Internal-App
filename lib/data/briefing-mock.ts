@@ -94,33 +94,51 @@ const OPENING: Record<VenueKey, { hours: string; note: string }> = {
 // plain module-level maps would give every route a private copy and writes
 // from one route would be invisible to the others.
 // ---------------------------------------------------------------------------
+// An alert with its date range, so multi-day alerts show across every day
+// they cover (mirrors the Airtable Date/Until model).
+interface StoredAlert extends UrgentAlert {
+  date: string; // first day (inclusive)
+}
+
 interface MockStore {
   taskDone: Map<string, boolean>; // `${date}:${taskId}`
   wraps: Map<string, WrapDraft>; // `${date}:${venue}` — date the wrap COVERS
-  alerts: Map<string, UrgentAlert[]>; // date shown
-  dismissed: Set<string>; // `${date}:${alertId}`
+  alertList: StoredAlert[];
+  dismissed: Set<string>; // alertId
   alertSeq: number;
+  seeded: boolean;
 }
 const g = globalThis as typeof globalThis & { __briefingMock?: MockStore };
 const store: MockStore = (g.__briefingMock ??= {
   taskDone: new Map(),
   wraps: new Map(),
-  alerts: new Map(),
+  alertList: [],
   dismissed: new Set(),
   alertSeq: 1,
+  seeded: false,
 });
-const { taskDone, wraps, alerts, dismissed } = store;
+const { taskDone, wraps, dismissed } = store;
 
-function seedAlerts(date: string): UrgentAlert[] {
-  // The design's sample alert appears on today's briefing only.
-  if (date !== todayLondon()) return [];
-  return [
-    {
-      id: "seed-a1",
-      text: "Card reader 2 is down — take card payments on reader 1 only until the replacement arrives.",
-      loc: "prologue",
-    },
-  ];
+// The design's sample alert, seeded once against today.
+function ensureSeeded() {
+  if (store.seeded) return;
+  store.seeded = true;
+  store.alertList.push({
+    id: "seed-a1",
+    text: "Card reader 2 is down — take card payments on reader 1 only until the replacement arrives.",
+    loc: "prologue",
+    level: "urgent",
+    date: todayLondon(),
+    until: null,
+  });
+}
+
+/** Alerts covering `date`: start ≤ date ≤ (until or start), not dismissed. */
+function alertsForDate(date: string): UrgentAlert[] {
+  ensureSeeded();
+  return store.alertList
+    .filter((a) => a.date <= date && date <= (a.until || a.date) && !dismissed.has(a.id))
+    .map((a) => ({ id: a.id, text: a.text, loc: a.loc, level: a.level, until: a.until }));
 }
 
 function tasksFor(date: string, venue: VenueKey): BriefTask[] {
@@ -161,7 +179,6 @@ function venueDay(date: string, venue: VenueKey): VenueBriefing {
 
 export const mockBriefingSource: BriefingDataSource = {
   async getDay(date: string): Promise<BriefingDay> {
-    if (!alerts.has(date)) alerts.set(date, seedAlerts(date));
     return {
       date,
       rosterAsOf: null,
@@ -169,7 +186,7 @@ export const mockBriefingSource: BriefingDataSource = {
         prologue: venueDay(date, "prologue"),
         simply: venueDay(date, "simply"),
       },
-      alerts: (alerts.get(date) ?? []).filter((a) => !dismissed.has(`${date}:${a.id}`)),
+      alerts: alertsForDate(date),
       milestones: [
         { venue: "prologue", who: "Priya", what: "birthday today" },
         { venue: "simply", who: "Ellie", what: "3 years today" },
@@ -185,14 +202,22 @@ export const mockBriefingSource: BriefingDataSource = {
     wraps.set(`${date}:${venue}`, { ...wrap, draft });
   },
 
-  async postAlert(date, text, loc) {
-    const alert: UrgentAlert = { id: `a${Date.now()}-${store.alertSeq++}`, text, loc };
-    alerts.set(date, [...(alerts.get(date) ?? seedAlerts(date)), alert]);
-    return alert;
+  async postAlert(date, text, loc, level, until) {
+    ensureSeeded();
+    const stored: StoredAlert = {
+      id: `a${Date.now()}-${store.alertSeq++}`,
+      text,
+      loc,
+      level,
+      date,
+      until: until ?? null,
+    };
+    store.alertList.push(stored);
+    return { id: stored.id, text, loc, level, until: stored.until };
   },
 
-  async dismissAlert(date, alertId) {
-    dismissed.add(`${date}:${alertId}`);
+  async dismissAlert(_date, alertId) {
+    dismissed.add(alertId);
   },
 };
 

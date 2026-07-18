@@ -47,10 +47,15 @@ export interface WrapDraft extends WrapUp {
   draft: boolean;
 }
 
+export type AlertLevel = "urgent" | "heads-up";
+
 export interface UrgentAlert {
   id: string;
   text: string;
   loc: "both" | VenueKey;
+  level: AlertLevel;
+  /** Last day the alert runs (inclusive, YYYY-MM-DD); null = single day. */
+  until?: string | null;
 }
 
 export interface Milestone {
@@ -153,6 +158,34 @@ export const ALERT_THEME: Record<"both" | VenueKey, { c: string; t: string }> = 
   simply: { c: "#378573", t: "#E4F0EC" },
   both: { c: "#B0812F", t: "#F6ECD6" },
 };
+
+// Two alert levels: urgent keeps the amber "read before shift" bar; heads-up
+// is a calmer blue "good to know today" note. `border`/`bg`/`accent`/`label`
+// style the panel; `title` heads it.
+export const ALERT_LEVELS: Record<AlertLevel, {
+  title: string;
+  border: string;
+  bg: string;
+  accent: string;
+  label: string;
+}> = {
+  urgent: {
+    title: "Urgent — read before shift",
+    border: "#E7D3A9",
+    bg: "#FBF3E6",
+    accent: "#B0812F",
+    label: "#8A5A12",
+  },
+  "heads-up": {
+    title: "Good to know today",
+    border: "#CBDCEA",
+    bg: "#EEF4F9",
+    accent: "#3D6E96",
+    label: "#2C4A63",
+  },
+};
+
+export const ALERT_LEVEL_ORDER: AlertLevel[] = ["urgent", "heads-up"];
 
 // ---------------------------------------------------------------------------
 // Date/time helpers. The shops run on Europe/London; the server may not.

@@ -1,5 +1,5 @@
 import type { VenueKey } from "@/lib/config";
-import type { UrgentAlert, WrapDraft, WrapUp } from "@/lib/briefing";
+import type { AlertLevel, UrgentAlert, WrapDraft, WrapUp } from "@/lib/briefing";
 
 // Airtable persistence for the briefing's wrap-ups and urgent alerts — the
 // two things that must outlive a serverless invocation. Lives in the
@@ -72,6 +72,8 @@ export async function briefingAirtableReady(): Promise<boolean> {
 
 const VENUE_NAME: Record<VenueKey, string> = { prologue: "Prologue", simply: "Simply Books" };
 const LOC_NAME: Record<UrgentAlert["loc"], string> = { ...VENUE_NAME, both: "Both" };
+const LEVEL_NAME: Record<AlertLevel, string> = { urgent: "Urgent", "heads-up": "Heads-up" };
+const levelFrom = (v: unknown): AlertLevel => (v === "Heads-up" ? "heads-up" : "urgent");
 
 async function at(path: string, init?: RequestInit): Promise<any> {
   const baseId = await resolveBaseId();
@@ -159,30 +161,39 @@ export async function saveAirtableWrap(
   }
 }
 
+const locFrom = (v: unknown): UrgentAlert["loc"] =>
+  ((Object.keys(LOC_NAME) as UrgentAlert["loc"][]).find((k) => LOC_NAME[k] === v) ?? "both");
+
+/** Alerts live on `date`: start ({Date}) on or before it, and either no end
+ *  ({Until} blank) or an end on or after it — so a multi-day alert shows on
+ *  every day of its range. Excludes dismissed. IS_AFTER/IS_BEFORE are the
+ *  date-safe comparisons (plain `=` on a date field never matches). */
 export async function getAirtableAlerts(date: string): Promise<UrgentAlert[]> {
-  const data = await at(byDate(ALERTS_TABLE, date, "NOT({Dismissed})"));
+  const formula = `AND(NOT({Dismissed}), NOT(IS_AFTER({Date},'${date}')), OR({Until}=BLANK(), NOT(IS_BEFORE({Until},'${date}'))))`;
+  const data = await at(`${encodeURIComponent(ALERTS_TABLE)}?filterByFormula=${encodeURIComponent(formula)}`);
   return (data.records ?? []).map((r: any) => ({
     id: r.id,
     text: r.fields.Text ?? "",
-    loc:
-      ((Object.keys(LOC_NAME) as UrgentAlert["loc"][]).find((k) => LOC_NAME[k] === r.fields.Location) ??
-        "both") as UrgentAlert["loc"],
+    loc: locFrom(r.fields.Location),
+    level: levelFrom(r.fields.Level),
+    until: r.fields.Until ?? null,
   }));
 }
 
 export async function postAirtableAlert(
   date: string,
   text: string,
-  loc: UrgentAlert["loc"]
+  loc: UrgentAlert["loc"],
+  level: AlertLevel,
+  until?: string | null
 ): Promise<UrgentAlert> {
+  const fields: Record<string, unknown> = { Text: text, Date: date, Location: LOC_NAME[loc], Level: LEVEL_NAME[level] };
+  if (until) fields.Until = until;
   const data = await at(encodeURIComponent(ALERTS_TABLE), {
     method: "POST",
-    body: JSON.stringify({
-      records: [{ fields: { Text: text, Date: date, Location: LOC_NAME[loc] } }],
-      typecast: true,
-    }),
+    body: JSON.stringify({ records: [{ fields }], typecast: true }),
   });
-  return { id: data.records[0].id, text, loc };
+  return { id: data.records[0].id, text, loc, level, until: until ?? null };
 }
 
 /** Dismiss = flag, not delete — keeps an audit trail in the base. */

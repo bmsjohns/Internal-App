@@ -17,15 +17,18 @@ import type { DataSource } from "./source";
 // NOTE ON SCHEMA: the V1 fields ("Location", "Notes") and V3 additions
 // ("Publisher", "Price", "Quantity", "Status Log", and the "Suppliers"
 // table) do not exist in the live base yet — see README §Schema migration.
-// Until the migration is applied, set AIRTABLE_HAS_NEW_FIELDS=false and this
-// implementation will neither read nor write them (sensible fallbacks on
-// read; suppliers come back empty).
+// AIRTABLE_HAS_NEW_FIELDS defaults to false (matching the live base as it
+// exists today) precisely so a fresh deploy is correct with zero migration
+// flags set; set it to "true" only once that migration is applied.
 
 const API = "https://api.airtable.com/v0";
+const DEFAULT_BASE = "appAlp6BBobAiV0d6";
 const ORDERS_TABLE = "tbl7kpDpf0XSrdtIS";
 const CUSTOMERS_TABLE = "tbljs0vrDw7rgMofN";
 // Created by the V3 migration; referenced by name until it exists.
 const SUPPLIERS_TABLE = "Suppliers";
+
+const baseId = () => process.env.AIRTABLE_BASE_ID || DEFAULT_BASE;
 
 // "Status Log" is a long-text field of one line per change: ISO|name|status
 function parseStatusLog(text: string): StatusLogEntry[] {
@@ -49,10 +52,10 @@ function env(name: string): string {
   return v;
 }
 
-const hasNewFields = () => process.env.AIRTABLE_HAS_NEW_FIELDS !== "false";
+const hasNewFields = () => process.env.AIRTABLE_HAS_NEW_FIELDS === "true";
 
 async function at(path: string, init?: RequestInit): Promise<any> {
-  const res = await fetch(`${API}/${env("AIRTABLE_BASE_ID")}/${path}`, {
+  const res = await fetch(`${API}/${baseId()}/${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${env("AIRTABLE_API_KEY")}`,

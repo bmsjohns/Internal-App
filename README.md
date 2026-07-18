@@ -48,7 +48,7 @@ venue is a property of the order, not the person. (Checked against spec §2a.1.)
 *with records* in Airtable (workspace → base menu → Duplicate) and apply the
 two fields to the duplicate first as a rehearsal; (3) apply to live base and
 backfill Location = Simply Books; (4) deploy with `AIRTABLE_HAS_NEW_FIELDS=true`.
-Until then the code runs with `AIRTABLE_HAS_NEW_FIELDS=false`: it neither
+Until then, the flag defaults to off (no env var needed) — the app neither
 reads nor writes the new fields and treats every record as Simply Books.
 
 ### Status field — V2 canonical model (display-only, still no schema change)
@@ -161,9 +161,12 @@ be added to the same metadata shape when the Events module lands.
 ## Deployment (Vercel)
 
 GitHub repo → Vercel import → env vars: `DATA_SOURCE=airtable`,
-`AIRTABLE_API_KEY` (a scoped PAT: data read/write on this base only),
-`AIRTABLE_BASE_ID=appAlp6BBobAiV0d6`, `AIRTABLE_HAS_NEW_FIELDS`, the two Clerk
-keys. Works behind a custom domain later.
+`AIRTABLE_API_KEY` (a scoped PAT: data read/write on both the Orders and
+Events bases), the two Clerk keys. That's the whole minimum set —
+`AIRTABLE_BASE_ID` and `AIRTABLE_HAS_NEW_FIELDS` both default correctly
+(base id to the live Orders base, new-fields to `false`/off, matching the
+live base as it stands) and only need setting to override. Works behind a
+custom domain later.
 
 > **Licensing note (spec §10):** Vercel Hobby is licensed for
 > personal/non-commercial use. A business is nominally meant to be on Pro

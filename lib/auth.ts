@@ -12,8 +12,8 @@ const devBypass = () =>
 // publicMetadata override these, so e.g. settings:manage can later be given
 // to a non-manager (or taken from a venue manager) without code changes.
 const ROLE_PERMISSIONS: Record<Role, string[]> = {
-  staff: ["callsheet:view"],
-  manager: ["settings:manage", "callsheet:view"],
+  staff: ["callsheet:view", "hub:view"],
+  manager: ["settings:manage", "callsheet:view", "hub:view", "hub:send"],
 };
 
 // Events Phase 1: pitching is deliberately NOT granted by any role — access
@@ -38,6 +38,21 @@ export const PITCHING_PERMISSIONS = ["pitching:view", "pitching:edit", "pitching
 //    being let into the rest of the module.
 export const EVENTS_PERMISSIONS = ["events:view", "events:edit"];
 export const CALLSHEET_PERMISSION = "callsheet:view";
+
+// Book Clubs + Ordering Hub (combined spec, Jul 2026):
+//  - hub:view — the Ordering Hub: staging + inline edits, the pending queue,
+//    marking arrived, restock capture. Spec C7 wants all of that friction-free
+//    for general staff, so BOTH roles get it by default.
+//  - hub:send — actually sending a batch (email or CSV). Restricted (C7);
+//    manager default, grantable per-person. The UI shows send controls as
+//    permission-locked rather than hiding them, so staff understand.
+//  - clubs:view / clubs:manage — member CRM incl. payment standing, and the
+//    Stripe write actions + monthly picks respectively. NOT granted by any
+//    role default for now: the spec's open question (Part D) is whether
+//    payment-adjacent member data should be visible to the same broad group
+//    as Orders — until Ben decides, access is explicit-grant like pitching.
+export const HUB_PERMISSIONS = ["hub:view", "hub:send"];
+export const CLUBS_PERMISSIONS = ["clubs:view", "clubs:manage"];
 
 /**
  * Resolve the current user, from Clerk when configured.
@@ -79,8 +94,9 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       name: process.env.DEV_AUTH_NAME ?? "Ben",
       role,
       managerLocations: role === "manager" ? "all" : [],
-      // Dev user gets pitching + events access so the modules are reachable locally.
-      permissions: [...ROLE_PERMISSIONS[role], ...PITCHING_PERMISSIONS, ...EVENTS_PERMISSIONS],
+      // Dev user gets pitching + events + clubs access so every module is
+      // reachable locally (hub:view/hub:send already come from the role).
+      permissions: [...ROLE_PERMISSIONS[role], ...PITCHING_PERMISSIONS, ...EVENTS_PERMISSIONS, ...CLUBS_PERMISSIONS],
     };
   }
   return null;

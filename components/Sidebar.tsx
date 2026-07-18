@@ -39,6 +39,55 @@ const COMING_SOON = [
   { label: "Schools", icon: '<path d="M3 9l9-5 9 5-9 5z"/><path d="M7 11v5c0 1 5 3 5 3s5-2 5-3v-5"/>' },
 ];
 
+// Book Clubs + Ordering Hub land as GROUPS with a sub-menu (Ben's ask:
+// "clicking Ordering then seeing the different things in the ordering hub").
+// A group auto-expands while you're inside it; its toggle state persists per
+// device. Badge keys map to /api/nav-counts fields.
+interface NavChild {
+  href: string;
+  label: string;
+  icon: string;
+  badge?: "failedPayments" | "drafts" | "pending" | "outstanding";
+  warn?: boolean;
+}
+interface NavGroup {
+  key: string;
+  label: string;
+  icon: string;
+  permission: string;
+  children: NavChild[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    key: "clubs",
+    label: "Book clubs",
+    icon: '<path d="M4 5h13a2 2 0 0 1 2 2v13H6a2 2 0 0 1-2-2z"/><path d="M4 5a2 2 0 0 1 2-2h9"/>',
+    permission: "clubs:view",
+    children: [
+      { href: "/clubs", label: "Clubs", icon: '<path d="M4 5h13a2 2 0 0 1 2 2v13H6a2 2 0 0 1-2-2z"/><path d="M4 5a2 2 0 0 1 2-2h9"/>' },
+      { href: "/members", label: "Members", icon: '<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3 2.9-5 6.5-5s6.5 2 6.5 5"/><path d="M16 5.2A3.2 3.2 0 0 1 16 11"/>' },
+      { href: "/failed-payments", label: "Failed payments", icon: '<path d="M3 10h18M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>', badge: "failedPayments", warn: true },
+    ],
+  },
+  {
+    key: "ordering",
+    label: "Ordering",
+    icon: '<path d="M3 3h2l2.4 12.5a1.5 1.5 0 0 0 1.5 1.2h8.7"/><circle cx="9.5" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M6.5 6.5h13l-1.5 7h-10z"/>',
+    permission: "hub:view",
+    children: [
+      { href: "/ordering/staging", label: "Staging", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 11h8M8 15h5"/>', badge: "drafts" },
+      { href: "/ordering/pending", label: "Pending queue", icon: '<path d="M3 3h2l2.4 12.5a1.5 1.5 0 0 0 1.5 1.2h8.7"/><circle cx="9.5" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/>', badge: "pending" },
+      { href: "/ordering/outstanding", label: "Outstanding", icon: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>', badge: "outstanding" },
+      { href: "/ordering/restock", label: "Restock", icon: '<path d="M4 7l8-4 8 4-8 4z"/><path d="M4 7v10l8 4 8-4V7"/>' },
+      { href: "/ordering/publishers", label: "Publishers", icon: '<path d="M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M8 3v18"/>' },
+    ],
+  },
+];
+
+const NAV_COUNTS_REFRESH_MS = 30_000;
+let navCountsCache: { at: number; counts: Record<string, number> } | null = null;
+
 // The sidebar re-renders on every navigation; without a throttle each click
 // hit /api/orders (two Airtable list reads) and quick navigation tripped
 // Airtable's 5 req/s limit. Module-level so the cache survives remounts;
@@ -56,6 +105,8 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
   const pathname = usePathname();
   const { venue, setVenue } = useVenue();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [navCounts, setNavCounts] = useState<Record<string, number>>({});
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   // Standalone, chrome-free surfaces: the day-of call sheet (its own access
   // tier + offline shell) and the printable call sheet.
   const bare = pathname.startsWith("/callsheet") || /^\/events\/[^/]+\/print/.test(pathname);
@@ -74,6 +125,37 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
       })
       .catch(() => {});
   }, [pathname]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ob-nav-groups");
+      if (saved) setOpenGroups(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (navCountsCache && Date.now() - navCountsCache.at < NAV_COUNTS_REFRESH_MS) {
+      setNavCounts(navCountsCache.counts);
+      return;
+    }
+    fetch("/api/nav-counts")
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((counts: Record<string, number>) => {
+        navCountsCache = { at: Date.now(), counts };
+        setNavCounts(counts);
+      })
+      .catch(() => {});
+  }, [pathname]);
+
+  const toggleGroup = (key: string) => {
+    setOpenGroups((g) => {
+      const next = { ...g, [key]: !g[key] };
+      try {
+        localStorage.setItem("ob-nav-groups", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const needsCount = orders.filter((o) => canonicalStatus(o.status).key === "needs-ordering").length;
   const canPitch = !!user?.permissions.includes("pitching:view");
@@ -99,7 +181,11 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
       <div className="fixed inset-x-0 top-0 z-20 flex items-center gap-3 border-b border-cream-2 bg-white px-4 py-2.5 lg:hidden">
         <Image src="/assets/p-mark-red.png" alt="" width={22} height={29} />
         <nav className="flex gap-1 overflow-x-auto">
-          {modules.map((m) => (
+          {[
+            ...modules,
+            // Mobile keeps a flat bar: each group's screens join it directly.
+            ...NAV_GROUPS.filter((g) => user?.permissions.includes(g.permission)).flatMap((g) => g.children),
+          ].map((m) => (
             <Link
               key={m.href}
               href={m.href}
@@ -177,6 +263,65 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
                   </span>
                 )}
               </Link>
+            );
+          })}
+          {NAV_GROUPS.filter((g) => user?.permissions.includes(g.permission)).map((g) => {
+            const inside = g.children.some((c) => pathname.startsWith(c.href));
+            const open = openGroups[g.key] ?? inside;
+            const groupBadge = g.children.reduce((sum, c) => sum + (c.badge ? (navCounts[c.badge] ?? 0) : 0), 0);
+            return (
+              <div key={g.key}>
+                <button
+                  onClick={() => toggleGroup(g.key)}
+                  className={`flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-[9px] text-sm transition-colors ${
+                    inside && !open ? "bg-shell font-semibold text-rust" : "font-medium text-charcoal hover:bg-ink/5"
+                  }`}
+                >
+                  <span className="flex w-5 justify-center">{ic(g.icon)}</span>
+                  <span className="flex-1 text-left">{g.label}</span>
+                  {!open && groupBadge > 0 && (
+                    <span className="min-w-5 rounded-full bg-cream-2 px-2 py-px text-center text-[11px] font-semibold tabular-nums text-charcoal">
+                      {groupBadge}
+                    </span>
+                  )}
+                  <svg
+                    width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                    strokeLinecap="round" strokeLinejoin="round"
+                    className={`text-stone transition-transform ${open ? "rotate-90" : ""}`}
+                  >
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                </button>
+                {open && (
+                  <div className="mb-1 ml-[22px] flex flex-col gap-0.5 border-l border-cream-2 pl-2 pt-0.5">
+                    {g.children.map((c) => {
+                      const active = pathname.startsWith(c.href);
+                      const badge = c.badge ? (navCounts[c.badge] ?? 0) : 0;
+                      return (
+                        <Link
+                          key={c.href}
+                          href={c.href}
+                          className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] transition-colors ${
+                            active ? "bg-shell font-semibold text-rust" : "font-medium text-charcoal hover:bg-ink/5"
+                          }`}
+                        >
+                          <span className="flex w-[18px] justify-center opacity-80">{ic(c.icon)}</span>
+                          <span className="flex-1">{c.label}</span>
+                          {badge > 0 && (
+                            <span
+                              className={`min-w-5 rounded-full px-2 py-px text-center text-[11px] font-semibold tabular-nums ${
+                                c.warn ? "bg-rust text-cream" : "bg-cream-2 text-charcoal"
+                              }`}
+                            >
+                              {badge}
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
           {COMING_SOON.map((m) => (

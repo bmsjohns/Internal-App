@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { VenueKey } from "@/lib/config";
 import type { AlertLevel, BriefingDay, BriefingEvent, UrgentAlert, VenueBriefing, WrapDraft } from "@/lib/briefing";
 import {
@@ -76,6 +77,7 @@ export default function BriefingPage() {
     day: BriefingDay;
     events: Record<VenueKey, BriefingEvent[]>;
     viewer?: { canPostAlert: boolean };
+    opsFlags?: { failedPayments: number; staleDrafts: number; canClubs: boolean; canHub: boolean };
   } | null>(null);
   const [error, setError] = useState("");
   const [weather, setWeather] = useState<Weather | null>(null);
@@ -539,6 +541,34 @@ export default function BriefingPage() {
             </div>
           );
         })}
+
+        {/* ============ clubs / ordering flags ============ */}
+        {/* Failed payments (spec B3) + stale hub drafts (spec C2) get a
+            standing flag here — the point is nobody has to remember to
+            check. Only shown while non-zero and only on today's page. */}
+        {isToday && ((data?.opsFlags?.failedPayments ?? 0) > 0 || (data?.opsFlags?.staleDrafts ?? 0) > 0) && (
+          <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-[10px] border border-cream-2 bg-white px-4 py-3 shadow-sm">
+            <span className="eyebrow text-stone">Needs attention</span>
+            {(data?.opsFlags?.failedPayments ?? 0) > 0 && (
+              <Link
+                href="/failed-payments"
+                className="inline-flex items-center gap-2 rounded-full border border-[#E9C5BE] bg-[#FBEAE7] px-3 py-1.5 text-[12.5px] font-semibold text-rust-deep hover:brightness-95"
+              >
+                <span className="h-2 w-2 rounded-full bg-[#C4462F]" />
+                {data!.opsFlags!.failedPayments} failed club payment{data!.opsFlags!.failedPayments === 1 ? "" : "s"}
+              </Link>
+            )}
+            {(data?.opsFlags?.staleDrafts ?? 0) > 0 && (
+              <Link
+                href="/ordering/staging"
+                className="inline-flex items-center gap-2 rounded-full border border-[#E9D8AE] bg-[#FBF1DA] px-3 py-1.5 text-[12.5px] font-semibold text-ochre hover:brightness-95"
+              >
+                <span className="h-2 w-2 rounded-full bg-ochre" />
+                {data!.opsFlags!.staleDrafts} hub draft{data!.opsFlags!.staleDrafts === 1 ? "" : "s"} sitting 7+ days
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* ============ slack notification ============ */}
         {!slackSeen && totalNew > 0 && (

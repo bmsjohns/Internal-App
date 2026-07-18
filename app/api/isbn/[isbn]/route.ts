@@ -36,7 +36,14 @@ async function fromGoogleBooks(isbn: string) {
   const data = await res.json();
   const info = data.items?.[0]?.volumeInfo;
   return info?.title
-    ? { title: info.title as string, author: (info.authors ?? []).join(", ") }
+    ? {
+        title: info.title as string,
+        author: (info.authors ?? []).join(", "),
+        // Ordering Hub staging (spec C2): publisher auto-populates from the
+        // lookup where available, always manually correctable.
+        publisher: (info.publisher as string | undefined) ?? "",
+        rrp: (data.items?.[0]?.saleInfo?.listPrice?.amount as number | undefined) ?? null,
+      }
     : null;
 }
 

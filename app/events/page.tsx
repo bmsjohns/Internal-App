@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import type { ShowEvent } from "@/lib/types";
+import type { Location, ShowEvent } from "@/lib/types";
+import { LOCATIONS } from "@/lib/types";
 import { EVENT_STATUSES, eventStatus } from "@/lib/events";
 import PageHeader, { btnPrimary } from "@/components/PageHeader";
 import EventListTable from "@/components/events/EventListTable";
@@ -23,6 +24,8 @@ export default function EventsPage() {
   const [statusKey, setStatusKey] = useState("all");
   const [venueId, setVenueId] = useState("all");
   const [type, setType] = useState("all");
+  const [location, setLocation] = useState<"all" | Location>("all");
+  const [sortBy, setSortBy] = useState<"date" | "name" | "venue" | "status">("date");
 
   useEffect(() => {
     fetch("/api/events")
@@ -54,9 +57,15 @@ export default function EventsPage() {
       if (statusKey !== "all" && eventStatus(e.status).key !== statusKey) return false;
       if (venueId !== "all" && e.venueId !== venueId) return false;
       if (type !== "all" && !e.types.includes(type)) return false;
+      if (location !== "all" && e.location !== location) return false;
       return true;
+    }).sort((a, b) => {
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "venue") return a.venueName.localeCompare(b.venueName);
+      if (sortBy === "status") return eventStatus(a.status).label.localeCompare(eventStatus(b.status).label);
+      return (a.date || "9999").localeCompare(b.date || "9999") || a.time.localeCompare(b.time);
     });
-  }, [events, statusKey, venueId, type]);
+  }, [events, statusKey, venueId, type, location, sortBy]);
 
   if (denied) {
     return (
@@ -137,6 +146,16 @@ export default function EventsPage() {
                 {t}
               </option>
             ))}
+          </select>
+          <select value={location} onChange={(e) => setLocation(e.target.value as "all" | Location)} className={select} aria-label="Location filter">
+            <option value="all">All locations</option>
+            {LOCATIONS.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)} className={select} aria-label="Sort events">
+            <option value="date">Sort: date</option>
+            <option value="name">Sort: event</option>
+            <option value="venue">Sort: venue</option>
+            <option value="status">Sort: status</option>
           </select>
         </div>
       </PageHeader>

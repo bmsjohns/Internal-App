@@ -3,9 +3,7 @@ import type {
   Host,
   Imprint,
   Pitch,
-  PitchInput,
   ShowEvent,
-  ShowEventInput,
   Venue,
 } from "@/lib/types";
 import type { EventsDataSource } from "./events-source";
@@ -574,6 +572,10 @@ export const mockEventsDataSource: EventsDataSource = {
     for (const e of EVENTS) if (e.venueId === id) e.venueName = changed.name;
     return { ...changed, eventIds: eventsOfVenue(id) };
   },
+  async deleteVenue(id) {
+    const i = VENUES_FULL.findIndex((v) => v.id === id);
+    if (i !== -1) VENUES_FULL.splice(i, 1);
+  },
 
   // --- Phase 2: Hosts ---
   async listHosts() {
@@ -606,5 +608,9 @@ export const mockEventsDataSource: EventsDataSource = {
     const changed = HOSTS[i];
     for (const e of EVENTS) if (e.hostId === id) e.hostName = changed.name;
     return { ...changed, eventIds: eventsOfHost(id) };
+  },
+  async deleteHost(id) {
+    const i = HOSTS.findIndex((h) => h.id === id);
+    if (i !== -1) HOSTS.splice(i, 1);
   },
 };

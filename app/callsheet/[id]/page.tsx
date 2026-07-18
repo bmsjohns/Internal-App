@@ -47,7 +47,7 @@ export default function CallSheetPage({ params }: { params: Promise<{ id: string
   const [data, setData] = useState<CallSheetPayload | null>(null);
   const [cachedAt, setCachedAt] = useState<string | null>(null); // set when showing an offline copy
   const [error, setError] = useState("");
-  const cacheKey = `ob-callsheet-${id}`;
+  const cachePrefix = `ob-callsheet-${id}-`;
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -61,31 +61,48 @@ export default function CallSheetPage({ params }: { params: Promise<{ id: string
   }, []);
 
   useEffect(() => {
-    // Cached copy first (instant, works offline), then revalidate.
-    try {
-      const raw = localStorage.getItem(cacheKey);
-      if (raw) {
-        const { at, payload } = JSON.parse(raw);
-        setData(payload);
-        setCachedAt(at);
-      }
-    } catch {}
     fetch(`/api/events/${id}/callsheet`)
       .then(async (r) => {
-        if (r.status === 403) throw new Error((await r.json()).error ?? "No access");
+        if (r.status === 401 || r.status === 403) {
+          // Never retain or display another session's sensitive offline copy.
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key?.startsWith(cachePrefix)) localStorage.removeItem(key);
+          }
+          sessionStorage.removeItem("ob-callsheet-viewer");
+          throw new Error((await r.json()).error ?? "No access");
+        }
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const { callSheet } = await r.json();
         setData(callSheet);
         setCachedAt(null);
         try {
-          localStorage.setItem(cacheKey, JSON.stringify({ at: new Date().toISOString(), payload: callSheet }));
+          sessionStorage.setItem("ob-callsheet-viewer", callSheet.me);
+          localStorage.setItem(`${cachePrefix}${callSheet.me}`, JSON.stringify({ at: new Date().toISOString(), payload: callSheet }));
         } catch {}
       })
       .catch((e) => {
-        // Offline (or error) with a cached copy: keep showing the copy.
-        setError((prev) => prev || (localStorage.getItem(cacheKey) ? "" : e.message));
+        // Only a network failure may use a recent cache scoped to the viewer
+        // established by this browser tab's last authorized response.
+        if (e instanceof TypeError) {
+          try {
+            const viewer = sessionStorage.getItem("ob-callsheet-viewer");
+            const raw = viewer ? localStorage.getItem(`${cachePrefix}${viewer}`) : null;
+            if (raw) {
+              const { at, payload } = JSON.parse(raw);
+              const age = Date.now() - new Date(at).getTime();
+              if (age >= 0 && age <= 24 * 60 * 60 * 1000 && payload?.me === viewer) {
+                setData(payload);
+                setCachedAt(at);
+                return;
+              }
+              if (viewer) localStorage.removeItem(`${cachePrefix}${viewer}`);
+            }
+          } catch {}
+        }
+        setError(e instanceof Error ? e.message : "Couldn’t open this call sheet");
       });
-  }, [id, cacheKey]);
+  }, [id, cachePrefix]);
 
   // Live markers move with the clock.
   const [, tick] = useState(0);

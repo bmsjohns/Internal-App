@@ -15,6 +15,7 @@ const blank = (): ShowEvent => ({
   time: "",
   venueId: null,
   venueName: "",
+  location: null,
   hostId: null,
   hostName: "",
   types: [],
@@ -75,8 +76,13 @@ function NewEventInner() {
             leadTitle: pitch.bookTitle,
             isbn: pitch.isbn,
             venueId: pitch.proposedVenueIds[0] ?? null,
+            location: pitch.location,
             fromPitchId: pitch.id,
-            notes: pitch.pitchingNotes,
+            notes: [
+              pitch.pitchingNotes,
+              pitch.publisherNames.length ? `Publisher: ${pitch.publisherNames.join(", ")}` : "",
+              pitch.imprintNames.length ? `Imprint: ${pitch.imprintNames.join(", ")}` : "",
+            ].filter(Boolean).join("\n\n"),
           });
         })
       );

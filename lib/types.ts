@@ -60,10 +60,44 @@ export interface Supplier {
   id: string;
   name: string;
   cadence: string; // free text: "Same day", "Tue & Thu", …
+  /** Legacy/default account number retained for existing exports. */
   accountNumber: string;
+  accountNumberSimply: string;
+  accountNumberPrologue: string;
+  repName: string;
+  repEmail: string;
+  discountThreshold: number | null;
+  thresholdNote: string;
 }
 
 export type SupplierInput = Omit<Supplier, "id">;
+
+export type OrderLineSource = "Restock" | "Event" | "School" | "Book Club" | "Customer Order" | "Other";
+export type OrderLineStatus = "Not yet ordered" | "Ordered" | "Received";
+export type FulfillmentMethod = "Email to rep" | "CSV export" | "Batchline";
+
+/** Shared Ordering Hub model. Customer-order lines are projected from Order;
+ * restock and future module lines are stored independently. */
+export interface OrderLine {
+  id: string;
+  bookTitle: string;
+  author: string;
+  isbn: string;
+  publisher: string;
+  imprint: string;
+  quantity: number;
+  price: number | null;
+  source: OrderLineSource;
+  sourceRef: string | null;
+  location: Location;
+  status: OrderLineStatus;
+  fulfillmentMethod: FulfillmentMethod;
+  actionedAt: string | null;
+  actionedBy: string;
+  createdAt: string;
+}
+
+export type OrderLineInput = Omit<OrderLine, "id" | "createdAt" | "actionedAt" | "actionedBy">;
 
 // ---------------------------------------------------------------------------
 // Events module, Phase 1: Pitching (separate Airtable base — see lib/data/events*)
@@ -184,6 +218,8 @@ export interface ShowEvent {
   time: string; // "HH:MM", "" when TBC
   venueId: string | null;
   venueName: string;
+  /** Owning shop, distinct from the venue's geographic area. */
+  location?: Location | null;
   hostId: string | null;
   hostName: string;
   types: string[]; // Event Type multi-select (raw Airtable options)

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ShowEvent, ShowEventInput } from "@/lib/types";
+import { LOCATIONS } from "@/lib/types";
 import { EVENT_STATUSES, eventStaffIds, eventStatus } from "@/lib/events";
 import { btnDanger, btnGhost, btnPrimary } from "@/components/PageHeader";
 import { Chevron, inputCls, labelCls, panelCls, panelHead, selectCls, selectWrap, textareaCls } from "@/components/form";
@@ -20,6 +21,7 @@ export interface EventsMeta {
   eventTypes: string[];
   ageGroups: string[];
   schemaReady: boolean;
+  eventLocationReady: boolean;
 }
 
 type Tab = "general" | "show" | "running" | "staffing" | "orders";
@@ -58,26 +60,42 @@ export default function EventEditor({
   // ----- optimistic autosave (existing events) -----
   const pending = useRef<Partial<ShowEventInput>>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const flush = useCallback(async () => {
-    const payload = pending.current;
-    pending.current = {};
-    if (Object.keys(payload).length === 0) return;
-    setSaveState("saving");
-    try {
-      const res = await fetch(`/api/events/${initial.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? `HTTP ${res.status}`);
-      setSaveState("saved");
-      setError("");
-    } catch (e) {
-      // Keep the user's values on screen; offer a retry rather than reverting.
-      pending.current = { ...payload, ...pending.current };
-      setSaveState("error");
-      setError(e instanceof Error ? e.message : "Couldn’t save");
-    }
+  const inFlight = useRef<Promise<void> | null>(null);
+  const mounted = useRef(true);
+  const flush = useCallback((keepalive = false): Promise<void> => {
+    if (inFlight.current) return inFlight.current;
+    const run = async () => {
+      while (Object.keys(pending.current).length > 0) {
+        const payload = pending.current;
+        pending.current = {};
+        if (mounted.current) setSaveState("saving");
+        try {
+          const res = await fetch(`/api/events/${initial.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            keepalive,
+          });
+          if (!res.ok) throw new Error((await res.json()).error ?? `HTTP ${res.status}`);
+          if (mounted.current) {
+            setSaveState("saved");
+            setError("");
+          }
+        } catch (e) {
+          // A failed older payload is merged behind any newer field values.
+          pending.current = { ...payload, ...pending.current };
+          if (mounted.current) {
+            setSaveState("error");
+            setError(e instanceof Error ? e.message : "Couldn’t save");
+          }
+          break;
+        }
+      }
+    };
+    inFlight.current = run().finally(() => {
+      inFlight.current = null;
+    });
+    return inFlight.current;
   }, [initial.id]);
 
   const set = useCallback(
@@ -86,11 +104,19 @@ export default function EventEditor({
       if (isNew) return;
       (pending.current as any)[key] = value;
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(flush, 700);
+      timer.current = setTimeout(() => void flush(), 700);
     },
     [isNew, flush]
   );
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (timer.current) clearTimeout(timer.current);
+      // keepalive asks the browser to finish this small PATCH during navigation.
+      void flush(true);
+    };
+  }, [flush]);
 
   async function create() {
     if (!draft.name.trim()) {
@@ -239,7 +265,7 @@ export default function EventEditor({
           <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-blush bg-shell px-4 py-3 text-[13px] font-semibold text-rust">
             <span>{error}</span>
             {saveState === "error" && (
-              <button onClick={flush} className="cursor-pointer rounded border border-rust px-2.5 py-1 text-xs font-semibold text-rust">
+              <button onClick={() => void flush()} className="cursor-pointer rounded border border-rust px-2.5 py-1 text-xs font-semibold text-rust">
                 Retry
               </button>
             )}
@@ -250,7 +276,7 @@ export default function EventEditor({
           <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-blush bg-shell px-4 py-3 text-[13px] text-rust">
             {ic('<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>', 16)}
             <div>
-              Converted from pitch <strong>{fromPitchRef}</strong> — author, title, ISBN and publisher carried
+              Converted from pitch <strong>{fromPitchRef}</strong> — author, title, ISBN, location, and publisher/imprint details carried
               over. Fill in the date, venue and team to confirm the booking.
             </div>
           </div>
@@ -322,6 +348,23 @@ export default function EventEditor({
                         </button>
                       )}
                     </div>
+                  </div>
+                  <div>
+                    <label className={labelCls} htmlFor="ev-location">Location</label>
+                    <div className={selectWrap}>
+                      <select
+                        id="ev-location"
+                        value={draft.location ?? ""}
+                        onChange={(e) => set("location", (e.target.value || null) as ShowEventInput["location"])}
+                        className={selectCls}
+                        disabled={disabled || !meta.eventLocationReady}
+                      >
+                        <option value="">Choose shop…</option>
+                        {LOCATIONS.map((location) => <option key={location} value={location}>{location}</option>)}
+                      </select>
+                      <Chevron />
+                    </div>
+                    {!meta.eventLocationReady && <p className="mb-0 mt-1.5 text-xs text-stone">Available after the Event Location migration.</p>}
                   </div>
                 </div>
               </section>

@@ -1,18 +1,30 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { authMode } from "@/lib/auth-config";
 
 const isPublic = createRouteMatcher(["/sign-in(.*)", "/manifest.webmanifest", "/icon.svg"]);
 
-const clerkEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const mode = authMode(process.env);
 
-// With Clerk configured, every non-public route requires a session. Without
-// it (local dev with DEV_AUTH_BYPASS=1), requests pass through and lib/auth
-// supplies the dev user; API routes still 401 if neither is configured.
-export default clerkEnabled
+function missingAuthResponse(req: Request) {
+  if (new URL(req.url).pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Authentication is not configured" }, { status: 503 });
+  }
+  return new NextResponse("Authentication is not configured", {
+    status: 503,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+// Missing production auth configuration must fail closed. The only pass-through
+// path is the explicit development-only bypass mirrored in lib/auth.
+export default mode === "clerk"
   ? clerkMiddleware(async (auth, req) => {
       if (!isPublic(req)) await auth.protect();
     })
-  : () => NextResponse.next();
+  : mode === "development-bypass"
+    ? () => NextResponse.next()
+    : (req: Request) => missingAuthResponse(req);
 
 export const config = {
   matcher: ["/((?!_next|.*\\..*).*)", "/(api|trpc)(.*)"],

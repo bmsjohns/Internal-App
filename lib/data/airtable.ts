@@ -3,6 +3,8 @@ import type {
   CustomerInput,
   Order,
   OrderInput,
+  OrderLine,
+  OrderLineInput,
   Location,
   StatusLogEntry,
   Supplier,
@@ -26,6 +28,7 @@ const ORDERS_TABLE = "tbl7kpDpf0XSrdtIS";
 const CUSTOMERS_TABLE = "tbljs0vrDw7rgMofN";
 // Created by the V3 migration; referenced by name until it exists.
 const SUPPLIERS_TABLE = "Suppliers";
+const ORDER_LINES_TABLE = "Order Lines";
 
 // "Status Log" is a long-text field of one line per change: ISO|name|status
 function parseStatusLog(text: string): StatusLogEntry[] {
@@ -142,6 +145,12 @@ function toSupplier(r: any): Supplier {
     name: f["Name"] ?? "",
     cadence: f["Cadence"] ?? "",
     accountNumber: f["Account Number"] ?? "",
+    accountNumberSimply: f["Simply Books Account"] ?? f["Account Number"] ?? "",
+    accountNumberPrologue: f["Prologue Account"] ?? "",
+    repName: f["Rep Name"] ?? "",
+    repEmail: f["Rep Email"] ?? "",
+    discountThreshold: typeof f["Discount Threshold"] === "number" ? f["Discount Threshold"] : null,
+    thresholdNote: f["Threshold Note"] ?? "",
   };
 }
 
@@ -150,6 +159,57 @@ function fromSupplier(input: Partial<SupplierInput>): Record<string, unknown> {
   if (input.name !== undefined) f["Name"] = input.name;
   if (input.cadence !== undefined) f["Cadence"] = input.cadence;
   if (input.accountNumber !== undefined) f["Account Number"] = input.accountNumber;
+  if (hasOrderLines()) {
+    if (input.accountNumberSimply !== undefined) f["Simply Books Account"] = input.accountNumberSimply;
+    if (input.accountNumberPrologue !== undefined) f["Prologue Account"] = input.accountNumberPrologue;
+    if (input.repName !== undefined) f["Rep Name"] = input.repName;
+    if (input.repEmail !== undefined) f["Rep Email"] = input.repEmail;
+    if (input.discountThreshold !== undefined) f["Discount Threshold"] = input.discountThreshold;
+    if (input.thresholdNote !== undefined) f["Threshold Note"] = input.thresholdNote;
+  }
+  return f;
+}
+
+function hasOrderLines() { return process.env.AIRTABLE_HAS_ORDER_LINES === "true"; }
+
+function toOrderLine(r: any): OrderLine {
+  const f = r.fields ?? {};
+  return {
+    id: r.id,
+    bookTitle: f["Book Title"] ?? "",
+    author: f["Author"] ?? "",
+    isbn: f["ISBN"]?.text ?? "",
+    publisher: f["Publisher"] ?? "",
+    imprint: f["Imprint"] ?? "",
+    quantity: typeof f["Quantity"] === "number" && f["Quantity"] > 0 ? f["Quantity"] : 1,
+    price: typeof f["Price"] === "number" ? f["Price"] : null,
+    source: f["Source"] ?? "Other",
+    sourceRef: f["Source Reference"] ?? null,
+    location: (f["Location"] as Location) ?? DEFAULT_LOCATION,
+    status: f["Status"] ?? "Not yet ordered",
+    fulfillmentMethod: f["Fulfillment Method"] ?? "Batchline",
+    actionedAt: f["Actioned At"] ?? null,
+    actionedBy: f["Actioned By"] ?? "",
+    createdAt: f["Created At"] ?? r.createdTime,
+  };
+}
+
+function fromOrderLine(input: Partial<OrderLineInput> & { actionedAt?: string | null; actionedBy?: string }): Record<string, unknown> {
+  const f: Record<string, unknown> = {};
+  if (input.bookTitle !== undefined) f["Book Title"] = input.bookTitle;
+  if (input.author !== undefined) f["Author"] = input.author;
+  if (input.isbn !== undefined) f["ISBN"] = input.isbn ? { text: input.isbn } : null;
+  if (input.publisher !== undefined) f["Publisher"] = input.publisher;
+  if (input.imprint !== undefined) f["Imprint"] = input.imprint;
+  if (input.quantity !== undefined) f["Quantity"] = input.quantity;
+  if (input.price !== undefined) f["Price"] = input.price;
+  if (input.source !== undefined) f["Source"] = input.source;
+  if (input.sourceRef !== undefined) f["Source Reference"] = input.sourceRef;
+  if (input.location !== undefined) f["Location"] = input.location;
+  if (input.status !== undefined) f["Status"] = input.status;
+  if (input.fulfillmentMethod !== undefined) f["Fulfillment Method"] = input.fulfillmentMethod;
+  if (input.actionedAt !== undefined) f["Actioned At"] = input.actionedAt;
+  if (input.actionedBy !== undefined) f["Actioned By"] = input.actionedBy;
   return f;
 }
 
@@ -204,6 +264,21 @@ export const airtableDataSource: DataSource = {
   },
   async deleteOrder(id) {
     await at(`${ORDERS_TABLE}/${id}`, { method: "DELETE" });
+  },
+
+  async listOrderLines() {
+    if (!hasOrderLines()) return [];
+    return (await atList(encodeURIComponent(ORDER_LINES_TABLE))).map(toOrderLine);
+  },
+  async createOrderLine(input: OrderLineInput) {
+    if (!hasOrderLines()) throw new Error("Ordering Hub Airtable migration has not been applied");
+    const data = await at(encodeURIComponent(ORDER_LINES_TABLE), { method: "POST", body: JSON.stringify({ fields: fromOrderLine(input) }) });
+    return toOrderLine(data);
+  },
+  async updateOrderLine(id, input) {
+    if (!hasOrderLines()) throw new Error("Ordering Hub Airtable migration has not been applied");
+    const data = await at(`${encodeURIComponent(ORDER_LINES_TABLE)}/${id}`, { method: "PATCH", body: JSON.stringify({ fields: fromOrderLine(input) }) });
+    return toOrderLine(data);
   },
 
   async listCustomers() {

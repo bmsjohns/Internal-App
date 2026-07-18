@@ -1,4 +1,4 @@
-import type { EventPhase, EventRole, HostInput, ScheduleItem, ShowEventInput, VenueInput } from "@/lib/types";
+import type { EventPhase, EventRole, HostInput, Location, ScheduleItem, ShowEventInput, VenueInput } from "@/lib/types";
 import { EVENT_STATUSES } from "@/lib/events";
 
 // Body → typed input parsing shared by the Events/Venues/Hosts API routes.
@@ -57,6 +57,7 @@ export function parseEventBody(body: any): ShowEventInput {
     date: /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : "",
     time: TIME_RE.test(body.time) ? body.time : "",
     venueId: str(body.venueId) || null,
+    location: (["Simply Books", "Prologue"] as Location[]).includes(body.location) ? body.location : null,
     hostId: str(body.hostId) || null,
     types: strArr(body.types),
     ages: strArr(body.ages),

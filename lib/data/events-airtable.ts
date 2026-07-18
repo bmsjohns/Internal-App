@@ -5,7 +5,6 @@ import type {
   EventVenue,
   Host,
   HostInput,
-  Imprint,
   Location,
   Pitch,
   PitchAttachment,
@@ -47,6 +46,7 @@ const PITCH_DECK_FIELD = "fldWOvhcZI2xdoCmP";
 
 const baseId = () => process.env.EVENTS_AIRTABLE_BASE_ID || DEFAULT_BASE;
 const hasLocationField = () => process.env.EVENTS_AIRTABLE_HAS_LOCATION === "true";
+export const hasEventLocationField = () => process.env.EVENTS_AIRTABLE_HAS_EVENT_LOCATION === "true";
 // Phase 2 schema guard: the live Events table has NO Status/ISBN/From Pitch
 // fields and no Event Roles / Run of Show tables yet. Until the migration in
 // docs/events-phase2-migration.md is applied (sandbox first, Ben approves),
@@ -330,6 +330,7 @@ function toShowEvent(
     time,
     venueId,
     venueName: venueId ? venueNames.get(venueId) ?? "" : "",
+    location: hasEventLocationField() ? ((f["Location"] as Location) ?? null) : null,
     hostId,
     hostName: hostId ? hostNames.get(hostId) ?? "" : "",
     types: f["Event Type"] ?? [],
@@ -378,6 +379,7 @@ function fromShowEvent(input: Partial<ShowEventInput>): Record<string, unknown> 
   if (input.callSheetSent !== undefined) f["Call Sheet Sent?"] = input.callSheetSent;
   if (input.salesReportSent !== undefined) f["Sales Report Sent?"] = input.salesReportSent;
   if (input.notes !== undefined) f["Notes"] = input.notes;
+  if (hasEventLocationField() && input.location !== undefined) f["Location"] = input.location || null;
   if (hasPhase2Schema()) {
     if (input.status !== undefined) f["Status"] = input.status || null;
     if (input.isbn !== undefined) f["ISBN"] = input.isbn ? { text: input.isbn } : null;
@@ -386,26 +388,41 @@ function fromShowEvent(input: Partial<ShowEventInput>): Record<string, unknown> 
   return f;
 }
 
-// Child-record sync: replace the event's roles / run-of-show rows wholesale.
-// Counts are small (≤ ~25 per event) and nothing references the row ids, so
-// delete-and-recreate beats a three-way diff. Airtable batches cap at 10.
+// Child-record sync: stage the replacement before deleting the previous rows.
+// This can temporarily duplicate rows if the final delete fails, but can never
+// destroy the last good copy because a create request failed halfway through.
 const chunk = <T,>(arr: T[], n = 10): T[][] => {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
   return out;
 };
 
-async function replaceChildren(table: string, eventId: string, rows: Record<string, unknown>[]): Promise<void> {
+export async function replaceChildren(table: string, eventId: string, rows: Record<string, unknown>[]): Promise<void> {
   const enc = encodeURIComponent(table);
   const existing = await atList(enc);
   const mine = existing.filter((r) => ((r.fields?.["Event"] ?? []) as string[])[0] === eventId);
+  const stagedIds: string[] = [];
+  try {
+    for (const batch of chunk(rows)) {
+      const created = await at(enc, {
+        method: "POST",
+        body: JSON.stringify({ records: batch.map((fields) => ({ fields })) }),
+      });
+      stagedIds.push(...(created.records ?? []).map((r: { id: string }) => r.id));
+    }
+  } catch (error) {
+    // Best-effort rollback of staged rows; the previous complete set remains.
+    for (const ids of chunk(stagedIds)) {
+      const params = new URLSearchParams();
+      for (const id of ids) params.append("records[]", id);
+      try { await at(`${enc}?${params}`, { method: "DELETE" }); } catch {}
+    }
+    throw error;
+  }
   for (const ids of chunk(mine.map((r) => r.id))) {
     const params = new URLSearchParams();
     for (const id of ids) params.append("records[]", id);
     await at(`${enc}?${params}`, { method: "DELETE" });
-  }
-  for (const batch of chunk(rows)) {
-    await at(enc, { method: "POST", body: JSON.stringify({ records: batch.map((fields) => ({ fields })) }) });
   }
 }
 
@@ -614,6 +631,9 @@ export const airtableEventsDataSource: EventsDataSource = {
     const data = await at(`${VENUES_TABLE}/${id}`, { method: "PATCH", body: JSON.stringify({ fields: fromVenue(input) }) });
     return toFullVenue(data, new Map());
   },
+  async deleteVenue(id) {
+    await at(`${VENUES_TABLE}/${id}`, { method: "DELETE" });
+  },
 
   // --- Phase 2: Hosts ---
   async listHosts() {
@@ -634,6 +654,9 @@ export const airtableEventsDataSource: EventsDataSource = {
   async updateHost(id, input) {
     const data = await at(`${HOSTS_TABLE}/${id}`, { method: "PATCH", body: JSON.stringify({ fields: fromHost(input) }) });
     return toHost(data);
+  },
+  async deleteHost(id) {
+    await at(`${HOSTS_TABLE}/${id}`, { method: "DELETE" });
   },
 
   async listImprints() {

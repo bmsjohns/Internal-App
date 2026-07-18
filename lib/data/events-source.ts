@@ -39,10 +39,12 @@ export interface EventsDataSource {
   getVenue(id: string): Promise<Venue | null>;
   createVenue(input: VenueInput): Promise<Venue>;
   updateVenue(id: string, input: Partial<VenueInput>): Promise<Venue>;
+  deleteVenue(id: string): Promise<void>;
 
   // --- Phase 2: Hosts ---
   listHosts(): Promise<Host[]>;
   getHost(id: string): Promise<Host | null>;
   createHost(input: HostInput): Promise<Host>;
   updateHost(id: string, input: Partial<HostInput>): Promise<Host>;
+  deleteHost(id: string): Promise<void>;
 }

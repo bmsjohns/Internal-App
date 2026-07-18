@@ -149,6 +149,9 @@ the app never writes unmatched names.
    - venue-scoped manager: `{ "role": "manager", "managerLocations": ["Prologue"] }`
    - joint manager: `{ "role": "manager", "managerLocations": "all" }`
 
+If Clerk is not configured, production now fails closed with HTTP 503 for
+pages and APIs. `DEV_AUTH_BYPASS=1` is accepted only outside production.
+
 **Conscious deviations to flag (spec §5):** (a) using a managed auth provider
 reverses the earlier "no third-party auth" decision — cost stays £0 but adds
 one third-party account holding staff emails; (b) roles live in Clerk
@@ -163,7 +166,9 @@ be added to the same metadata shape when the Events module lands.
 GitHub repo → Vercel import → env vars: `DATA_SOURCE=airtable`,
 `AIRTABLE_API_KEY` (a scoped PAT: data read/write on this base only),
 `AIRTABLE_BASE_ID=appAlp6BBobAiV0d6`, `AIRTABLE_HAS_NEW_FIELDS`, the two Clerk
-keys. Works behind a custom domain later.
+keys, and only the schema flags whose migrations have been verified. See the
+migration documents before enabling `EVENTS_AIRTABLE_HAS_PHASE2`,
+`EVENTS_AIRTABLE_HAS_EVENT_LOCATION`, or `AIRTABLE_HAS_ORDER_LINES`.
 
 > **Licensing note (spec §10):** Vercel Hobby is licensed for
 > personal/non-commercial use. A business is nominally meant to be on Pro
@@ -293,7 +298,7 @@ locations; see `lib/events.ts`).
 
 **Screens:**
 - `/events` — list + calendar toggle over the same data; filters for
-  status / venue / event type. Mobile gets stacked cards instead of the table.
+  status / venue / event type / shop Location, with explicit sorting. Mobile gets stacked cards instead of the table.
 - `/events/[id]` — one screen, five sub-tabs (design brief §2): General,
   Show details, **Running order** (time-sequenced plan by Pre/During/Post
   show phase, inline step editing, live "Now / Up next" markers from the
@@ -302,7 +307,8 @@ locations; see `lib/events.ts`).
   (Phase 3 placeholder). Existing events **autosave optimistically**
   (debounced PATCH, Saved/Retry states); `/events/new` accumulates a draft
   and POSTs. "Convert to booking" on a won pitch opens
-  `/events/new?fromPitch=<id>` with author/title/ISBN/venue carried over.
+  `/events/new?fromPitch=<id>` with author/title/ISBN/venue/shop Location and
+  publisher/imprint context carried over.
 - `/venues`, `/venues/[id]`, `/venues/new` — card grid + CRUD (photo and
   tech-spec attachments read-only from Airtable).
 - `/hosts`, `/hosts/[id]`, `/hosts/new` — table + CRUD (Team Contact(s) is
@@ -313,7 +319,8 @@ locations; see `lib/events.ts`).
 - `/callsheet/[id]` — **Live mode**, the day-of call sheet (spec §6):
   standalone phone-first page with the event facts, tap-to-call host,
   live Now/Next banner, run of show, and the whole team's roles. Built for
-  poor signal: data snapshots to `localStorage`, a **service worker**
+  poor signal: recent data snapshots are cached per authorized viewer for at
+  most 24 hours (never displayed before an auth/network result), and a **service worker**
   (`public/sw.js`) caches the page shell + static assets on the FIRST load
   (the page primes its own URL into the cache), so it keeps working — and
   survives a reload — after connectivity drops. This is the app's one
@@ -339,6 +346,23 @@ sandbox-first runbook — is in
 the running-order/staffing editors are read-only with a notice (mock mode
 is fully editable). `Date and Time` maps to the app's date + time in
 **Europe/London** both ways, so 7.30pm stays 7.30pm wherever the server runs.
+
+## Ordering Hub
+
+`/to-order` is the shared Ordering Hub. It projects existing Customer Orders
+into the generic `OrderLine` shape and persists manually scanned Restock
+lines. Ordinary customer orders and restock are grouped into the Batchline
+decision-support view; only genuine checked Special Orders enter the
+rep-send view. Supplier settings now hold per-location accounts, rep contact
+details, and optional batching thresholds. Email actions open an editable
+draft and CSV remains an explicit download—neither sends silently.
+
+Event, School, and Book Club are valid model sources but intentionally not
+fabricated before those source modules exist. The sandbox-first schema and
+enablement steps are in
+[docs/ordering-hub-migration.md](docs/ordering-hub-migration.md). Customer
+Orders work before that migration; Restock entry is disabled against Airtable
+until `AIRTABLE_HAS_ORDER_LINES=true`.
 
 ## Open questions for Ben
 

@@ -35,3 +35,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const venue = await getEventsDataSource().updateVenue((await params).id, input);
   return NextResponse.json({ venue });
 }
+
+export async function DELETE(_req: NextRequest, { params }: Params) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(user, "events:edit")) {
+    return NextResponse.json({ error: "No events edit access" }, { status: 403 });
+  }
+  const ds = getEventsDataSource();
+  const id = (await params).id;
+  const venue = await ds.getVenue(id);
+  if (!venue) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (venue.eventIds.length > 0) {
+    return NextResponse.json({ error: "Move or delete this venue’s events before deleting it" }, { status: 409 });
+  }
+  await ds.deleteVenue(id);
+  return new NextResponse(null, { status: 204 });
+}

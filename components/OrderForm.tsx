@@ -42,7 +42,7 @@ const emptyDraft = (location: Location): Draft => ({
   statusKey: "needs-ordering",
   paid: "Not Paid",
   deliveryMethod: "Collection",
-  specialOrder: true,
+  specialOrder: false,
   isPreorder: false,
   preorderPublicationDate: "",
   location,

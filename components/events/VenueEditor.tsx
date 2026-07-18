@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Venue, VenueInput } from "@/lib/types";
 import { VENUE_LOCATION_OPTIONS, VENUE_STATUS_OPTIONS } from "@/lib/events";
-import { btnPrimary } from "@/components/PageHeader";
+import { btnDanger, btnPrimary } from "@/components/PageHeader";
 import { Chevron, inputCls, labelCls, panelCls, panelHead, selectCls, selectWrap, textareaCls } from "@/components/form";
 
 const emptyVenue = (): Venue => ({
@@ -52,6 +52,20 @@ export default function VenueEditor({ initial }: { initial?: Venue }) {
     }
   }
 
+  async function remove() {
+    if (isNew || !confirm(`Delete “${draft.name}”? This cannot be undone.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/venues/${draft.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error ?? `HTTP ${res.status}`);
+      router.push("/venues");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn’t delete the venue");
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="ob-screen flex min-h-screen flex-col">
       <header className="sticky top-[52px] z-10 flex flex-wrap items-center gap-3 border-b-[1.5px] border-rust bg-cream px-4 pb-3.5 pt-4 sm:px-8 sm:pt-[22px] lg:top-0">
@@ -63,9 +77,12 @@ export default function VenueEditor({ initial }: { initial?: Venue }) {
           <div className="eyebrow mb-1 text-rust">{isNew ? "New venue" : "Venue"}</div>
           <h1 className="m-0 truncate text-[24px] leading-none sm:text-[26px]">{draft.name || "Untitled venue"}</h1>
         </div>
-        <button onClick={save} disabled={busy} className={btnPrimary}>
-          {busy ? "Saving…" : "Save venue"}
-        </button>
+        <div className="flex gap-2">
+          {!isNew && <button onClick={remove} disabled={busy || draft.eventIds.length > 0} className={btnDanger}>Delete</button>}
+          <button onClick={save} disabled={busy} className={btnPrimary}>
+            {busy ? "Saving…" : "Save venue"}
+          </button>
+        </div>
       </header>
 
       <div className="grid w-full max-w-[1040px] items-start gap-6 px-4 pb-12 pt-6 sm:px-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(260px,1fr)]">

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getEventsDataSource } from "@/lib/data/events";
-import { hasPhase2Schema } from "@/lib/data/events-airtable";
+import { hasEventLocationField, hasPhase2Schema } from "@/lib/data/events-airtable";
 import { can, getSessionUser } from "@/lib/auth";
 import { getStaffDirectory } from "@/lib/staff";
 import { AGE_GROUP_OPTIONS, EVENT_TYPE_OPTIONS } from "@/lib/events";
@@ -25,5 +25,6 @@ export async function GET() {
     // False while the live base is pre-migration: the UI shows the running
     // order / staffing editors read-only instead of losing edits.
     schemaReady: process.env.DATA_SOURCE !== "airtable" || hasPhase2Schema(),
+    eventLocationReady: process.env.DATA_SOURCE !== "airtable" || hasEventLocationField(),
   });
 }

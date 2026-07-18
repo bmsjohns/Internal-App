@@ -13,6 +13,7 @@ first, then live, with Ben's approval — same rule as Phase 0),
 - shows the running order / staffing editors **read-only** with a notice,
   instead of accepting edits it would have nowhere to save,
 - neither reads nor writes ISBN / From Pitch on events.
+- leaves the shop Location filter empty until the separate Location field is ready.
 
 Once the migration is applied and verified, set
 `EVENTS_AIRTABLE_HAS_PHASE2=true` and everything unlocks — no code changes.
@@ -24,6 +25,12 @@ Once the migration is applied and verified, set
 | `Status` | single select | `Confirmed`, `Provisional`, `Draft`, `Cancelled`. Backfill every existing record to `Confirmed` (they're all real bookings). |
 | `ISBN` | barcode | Same type as Event Pitching's ISBN. The design's General tab has an ISBN field; the live table currently has nowhere to put it. |
 | `From Pitch` | link → `Event Pitching` | The pitch a booking was converted from. Optional (standalone events leave it empty). |
+| `Location` | single select | `Simply Books`, `Prologue`. This is the owning shop/account, not the venue's geographic Location field. Backfill from the operational owner of each event. |
+
+After verifying the `Location` backfill, set
+`EVENTS_AIRTABLE_HAS_EVENT_LOCATION=true`. It is deliberately a separate
+flag so enabling the other Phase 2 fields cannot accidentally write to an
+unmigrated Location column.
 
 ## 2. New table: `Event Roles`
 

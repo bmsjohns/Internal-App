@@ -93,6 +93,13 @@ describe("integration name matching (no-ids rule)", () => {
     expect(venueForCompany({ CompanyName: "Warehouse" })).toBeNull();
   });
 
+  it("filters Airtable by formatted date, not raw string equality", async () => {
+    const { dateEq } = await import("@/lib/data/briefing-airtable");
+    // The raw-string form (`{Date}='...'`) silently matches nothing; the
+    // formatted form is what actually reads a date field back.
+    expect(dateEq("2026-07-18")).toBe("DATETIME_FORMAT({Date},'YYYY-MM-DD')='2026-07-18'");
+  });
+
   it("normalises pasted Deputy hostnames", async () => {
     const { normalizeDeputyHost } = await import("@/lib/data/briefing-deputy");
     expect(normalizeDeputyHost("8444e614052702.eu.deputy.com/")).toBe("8444e614052702.eu.deputy.com");

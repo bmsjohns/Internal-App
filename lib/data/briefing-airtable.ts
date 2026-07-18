@@ -85,9 +85,15 @@ async function at(path: string, init?: RequestInit): Promise<any> {
   return res.json();
 }
 
+// Airtable gotcha: a date field compared to a string with `=` (e.g.
+// `{Date}='2026-07-18'`) matches NOTHING — {Date} evaluates to a datetime,
+// so the equality is always false and every read comes back empty even
+// though the write succeeded. Compare the formatted date instead.
+export const dateEq = (date: string) => `DATETIME_FORMAT({Date},'YYYY-MM-DD')='${date}'`;
+
 const byDate = (table: string, date: string, extra = "") =>
   `${encodeURIComponent(table)}?filterByFormula=${encodeURIComponent(
-    extra ? `AND({Date}='${date}',${extra})` : `{Date}='${date}'`
+    extra ? `AND(${dateEq(date)},${extra})` : dateEq(date)
   )}`;
 
 /** Wrap-ups COVERING `date` (the page shows them on the following day). */

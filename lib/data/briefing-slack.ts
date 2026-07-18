@@ -48,6 +48,29 @@ async function displayName(userId: string): Promise<string> {
   return userNames.get(userId)!;
 }
 
+// Message "subtypes" that are channel plumbing (joins, topic changes, pins),
+// not chatter. Everything else — including plain messages (no subtype), bot
+// posts, file shares and thread broadcasts — is real content the shift team
+// posted, so we keep it rather than dropping everything with a subtype.
+const NOISE_SUBTYPES = new Set([
+  "channel_join", "channel_leave", "channel_topic", "channel_purpose",
+  "channel_name", "channel_archive", "channel_unarchive", "group_join",
+  "group_leave", "pinned_item", "unpinned_item", "bot_add", "bot_remove",
+  "reminder_add", "reminder_delete",
+]);
+
+const isChatter = (m: any) =>
+  m.type === "message" && !NOISE_SUBTYPES.has(m.subtype) && (m.text || m.files?.length);
+
+async function toMessage(m: any): Promise<SlackMessage> {
+  const ts = Number(m.ts);
+  const author = m.user
+    ? await displayName(m.user)
+    : m.username || m.bot_profile?.name || "Bot";
+  const text = m.text || (m.files?.length ? "(shared a file)" : "");
+  return { id: m.ts, author, time: fmtTime(ts), text, isNew: Date.now() / 1000 - ts < 3600 };
+}
+
 /** Unix range for a YYYY-MM-DD day in Europe/London (DST-safe ±1h probe). */
 function londonDayRange(date: string): { oldest: number; latest: number } {
   const utcMidnight = Date.parse(`${date}T00:00:00Z`);
@@ -70,27 +93,43 @@ export async function getSlackDay(date: string, venue: VenueKey): Promise<SlackM
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.messages;
 
+  const channel = channelFor(venue);
   const { oldest, latest } = londonDayRange(date);
   const d = await slack("conversations.history", {
-    channel: channelFor(venue),
+    channel,
     oldest: String(oldest),
     latest: String(latest),
-    limit: "50",
+    limit: "200",
     inclusive: "true",
   });
-  const raw = (d.messages ?? []).filter((m: any) => m.type === "message" && !m.subtype && m.text);
-  const messages: SlackMessage[] = [];
-  for (const m of raw.reverse()) {
-    // oldest → newest, matching Slack's own convention (spec §8)
-    const ts = Number(m.ts);
-    messages.push({
-      id: m.ts,
-      author: await displayName(m.user),
-      time: fmtTime(ts),
-      text: m.text,
-      isNew: Date.now() / 1000 - ts < 3600,
-    });
+  const top = (d.messages ?? []).filter(isChatter);
+
+  // conversations.history returns only thread PARENTS, never the replies
+  // inside them — so a handover discussed in a thread would show just its
+  // first line. Pull replies for any parent that has them; a reply can fall
+  // on a different day than its parent, so re-filter to the day window.
+  const collected: any[] = [...top];
+  const parents = top.filter((m: any) => (m.reply_count ?? 0) > 0);
+  for (const p of parents) {
+    try {
+      const r = await slack("conversations.replies", { channel, ts: p.ts, limit: "200" });
+      for (const reply of r.messages ?? []) {
+        if (reply.ts === p.ts) continue; // parent is echoed first — skip
+        const ts = Number(reply.ts);
+        if (ts >= oldest && ts < latest && isChatter(reply)) collected.push(reply);
+      }
+    } catch {
+      // A single unreadable thread must not sink the whole feed.
+    }
   }
+
+  // De-dupe by ts, then oldest → newest (Slack's own convention, spec §8).
+  const seen = new Set<string>();
+  const ordered = collected
+    .filter((m) => !seen.has(m.ts) && seen.add(m.ts))
+    .sort((a, b) => Number(a.ts) - Number(b.ts));
+  const messages = await Promise.all(ordered.map(toMessage));
+
   cache.set(key, { at: Date.now(), messages });
   return messages;
 }

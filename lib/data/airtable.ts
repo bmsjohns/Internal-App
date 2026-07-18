@@ -8,7 +8,7 @@ import type {
   Supplier,
   SupplierInput,
 } from "@/lib/types";
-import { DEFAULT_LOCATION } from "@/lib/config";
+import { CANONICAL_STATUSES, DEFAULT_LOCATION } from "@/lib/config";
 import type { DataSource } from "./source";
 
 // Airtable REST implementation. Uses the REST API directly (no SDK — smaller,
@@ -89,17 +89,43 @@ async function at(path: string, init?: RequestInit): Promise<any> {
   }
 }
 
-async function atList(table: string): Promise<any[]> {
+async function atList(table: string, extra?: Record<string, string>): Promise<any[]> {
   const records: any[] = [];
   let offset: string | undefined;
   do {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(extra);
     if (offset) params.set("offset", offset);
     const data = await at(`${table}?${params}`);
     records.push(...data.records);
     offset = data.offset;
   } while (offset);
   return records;
+}
+
+// The base holds years of order history (6k+ rows — 60+ paginated requests
+// per full list), but the app only ever surfaces open orders plus recent
+// history. Closed orders older than the window stay in Airtable and are
+// simply not loaded; open orders always load regardless of age, so nothing
+// actionable can fall off the queue. CREATED_TIME() is used instead of the
+// "Order Date" field because that field may not exist in the live base yet
+// (toOrder falls back to createdTime for the same reason).
+const CLOSED_STATUS_KEYS = new Set(["collected", "cant-get", "cancelled"]);
+
+function ordersWindowFormula(): string {
+  const months = Number(process.env.ORDERS_WINDOW_MONTHS) || 12;
+  const closed = CANONICAL_STATUSES.filter((s) => CLOSED_STATUS_KEYS.has(s.key)).flatMap((s) => s.raw);
+  const isClosed = `OR(${closed.map((o) => `{Status}="${o}"`).join(",")})`;
+  return `OR(NOT(${isClosed}), IS_AFTER(CREATED_TIME(), DATEADD(NOW(), -${months}, 'months')))`;
+}
+
+// Full-history search, matching the same fields the orders page searches
+// client-side. {Customers} renders linked customers' names in formulas, so
+// customer-name search works without a join.
+const escapeFormulaString = (s: string) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
+function ordersSearchFormula(query: string): string {
+  const q = escapeFormulaString(query.toLowerCase());
+  return `SEARCH("${q}", LOWER({Book Title} & " " & {Author} & " " & {ISBN} & " " & ARRAYJOIN({Customers}, " ")))`;
 }
 
 // Per-table list cache: concurrent callers share one in-flight request, and
@@ -109,20 +135,24 @@ async function atList(table: string): Promise<any[]> {
 const LIST_CACHE_TTL_MS = 10_000;
 const listCache = new Map<string, { at: number; records: Promise<any[]> }>();
 
-function cachedList(table: string): Promise<any[]> {
-  const hit = listCache.get(table);
+function cachedList(table: string, extra?: Record<string, string>, key = table): Promise<any[]> {
+  const hit = listCache.get(key);
   if (hit && Date.now() - hit.at < LIST_CACHE_TTL_MS) return hit.records;
-  const records = atList(table).catch((e) => {
-    listCache.delete(table);
+  const records = atList(table, extra).catch((e) => {
+    listCache.delete(key);
     throw e;
   });
-  listCache.set(table, { at: Date.now(), records });
+  listCache.set(key, { at: Date.now(), records });
   return records;
 }
 
+// Cache keys are `table` or `table:suffix` (e.g. per-query search results),
+// so clearing a table also drops every derived entry for it.
 export function clearListCache(table?: string) {
-  if (table) listCache.delete(table);
-  else listCache.clear();
+  if (!table) return listCache.clear();
+  for (const key of listCache.keys()) {
+    if (key === table || key.startsWith(`${table}:`)) listCache.delete(key);
+  }
 }
 
 function toOrder(r: any): Order {
@@ -229,7 +259,28 @@ function invalidateOrders() {
 
 export const airtableDataSource: DataSource = {
   async listOrders() {
-    const records = await cachedList(ORDERS_TABLE);
+    const records = await cachedList(ORDERS_TABLE, { filterByFormula: ordersWindowFormula() });
+    return records.map(toOrder);
+  },
+  async searchOrders(query) {
+    const q = query.trim();
+    if (!q) return [];
+    const records = await cachedList(
+      ORDERS_TABLE,
+      { filterByFormula: ordersSearchFormula(q) },
+      `${ORDERS_TABLE}:search:${q.toLowerCase()}`
+    );
+    return records.map(toOrder);
+  },
+  async getOrdersByIds(ids) {
+    // OR(RECORD_ID()=…) keeps each formula well under Airtable's length
+    // limits at 50 ids per request; most customers need a single request.
+    const records: any[] = [];
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50);
+      const formula = `OR(${chunk.map((id) => `RECORD_ID()="${id}"`).join(",")})`;
+      records.push(...(await atList(ORDERS_TABLE, { filterByFormula: formula })));
+    }
     return records.map(toOrder);
   },
   async getOrder(id) {

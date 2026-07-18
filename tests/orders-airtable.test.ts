@@ -66,6 +66,82 @@ describe("Airtable rate-limit defences", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("scopes the orders list to open + recent records, but not customers", async () => {
+    const fetchMock = vi.fn(async () => ok({ records: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await airtableDataSource.listOrders();
+    await airtableDataSource.listCustomers();
+
+    // URLSearchParams encodes spaces as "+"; undo both layers for readable asserts.
+    const ordersUrl = decodeURIComponent(fetchMock.mock.calls[0][0] as string).replace(/\+/g, " ");
+    expect(ordersUrl).toContain("filterByFormula=");
+    // Open orders always load regardless of age; closed ones only inside the window.
+    expect(ordersUrl).toContain("NOT(OR({Status}=\"Collected\"");
+    expect(ordersUrl).toContain("IS_AFTER(CREATED_TIME(), DATEADD(NOW(), -12, 'months'))");
+    expect(ordersUrl).not.toContain("{Status}=\"Ordered\"");
+    expect(fetchMock.mock.calls[1][0]).not.toContain("filterByFormula");
+  });
+
+  it("keeps the filter on subsequent pagination pages", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(ok({ records: [record], offset: "page2" }))
+      .mockResolvedValueOnce(ok({ records: [record] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const orders = await airtableDataSource.listOrders();
+
+    expect(orders).toHaveLength(2);
+    const page2 = decodeURIComponent(fetchMock.mock.calls[1][0] as string);
+    expect(page2).toContain("offset=page2");
+    expect(page2).toContain("filterByFormula=");
+  });
+
+  it("searches the full history with an escaped Airtable formula", async () => {
+    const fetchMock = vi.fn(async () => ok({ records: [record] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const orders = await airtableDataSource.searchOrders('the "dune" saga');
+
+    expect(orders).toHaveLength(1);
+    const url = decodeURIComponent(fetchMock.mock.calls[0][0] as string).replace(/\+/g, " ");
+    expect(url).toContain('SEARCH("the \\"dune\\" saga"');
+    // No window clause — search covers all orders regardless of age.
+    expect(url).not.toContain("CREATED_TIME");
+    expect(await airtableDataSource.searchOrders("   ")).toEqual([]);
+  });
+
+  it("fetches orders by id in chunks of 50", async () => {
+    const fetchMock = vi.fn(async () => ok({ records: [record] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const ids = Array.from({ length: 60 }, (_, i) => `rec${i}`);
+    const orders = await airtableDataSource.getOrdersByIds(ids);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(orders).toHaveLength(2);
+    const url = decodeURIComponent(fetchMock.mock.calls[0][0] as string);
+    expect(url).toContain('RECORD_ID()="rec0"');
+    expect(url).toContain('RECORD_ID()="rec49"');
+    expect(url).not.toContain('RECORD_ID()="rec50"');
+    expect(await airtableDataSource.getOrdersByIds([])).toEqual([]);
+  });
+
+  it("clears cached search results when an order is written", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === "POST" ? ok(record) : ok({ records: [record] })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await airtableDataSource.searchOrders("dune");
+    await airtableDataSource.createOrder({ bookTitle: "Dune" } as never);
+    await airtableDataSource.searchOrders("dune");
+
+    const gets = fetchMock.mock.calls.filter(([, init]) => !init?.method);
+    expect(gets).toHaveLength(2);
+  });
+
   it("invalidates the cache on writes so the next list refetches", async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) =>
       init?.method === "POST" ? ok(record) : ok({ records: [record] })

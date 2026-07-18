@@ -4,7 +4,12 @@ import type { Customer, CustomerInput, Order, OrderInput, Supplier, SupplierInpu
 // route goes through this interface. Swapping the store means writing one new
 // implementation and changing the DATA_SOURCE env var — nothing else.
 export interface DataSource {
+  /** Open orders (any age) + closed orders inside the recent window. */
   listOrders(): Promise<Order[]>;
+  /** Full-history search on title / author / ISBN / customer name. */
+  searchOrders(query: string): Promise<Order[]>;
+  /** Fetch specific orders by id regardless of age (e.g. a customer's history). */
+  getOrdersByIds(ids: string[]): Promise<Order[]>;
   getOrder(id: string): Promise<Order | null>;
   createOrder(input: OrderInput): Promise<Order>;
   updateOrder(id: string, input: Partial<OrderInput>): Promise<Order>;

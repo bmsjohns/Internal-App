@@ -13,8 +13,9 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const ds = getDataSource();
   const customer = await ds.getCustomer(id);
   if (!customer) notFound();
-  const orders = (await ds.listOrders())
-    .filter((o) => o.customerIds.includes(customer.id))
+  // Fetched by the customer's order links rather than filtering listOrders,
+  // so the full history shows even past the recent-orders window.
+  const orders = (await ds.getOrdersByIds(customer.orderIds))
     .sort((a, b) => (a.orderDate < b.orderDate ? 1 : -1))
     .map((o) => ({ ...o, customerName: customer.name, customerPhone: customer.phone }));
 

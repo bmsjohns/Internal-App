@@ -22,13 +22,7 @@ export async function POST(req: NextRequest) {
   const supplier = await getDataSource().createSupplier({
     name: body.name.trim(),
     cadence: body.cadence?.trim() ?? "",
-    accountNumber: body.accountNumberSimply?.trim() ?? body.accountNumber?.trim() ?? "",
-    accountNumberSimply: body.accountNumberSimply?.trim() ?? body.accountNumber?.trim() ?? "",
-    accountNumberPrologue: body.accountNumberPrologue?.trim() ?? "",
-    repName: body.repName?.trim() ?? "",
-    repEmail: body.repEmail?.trim() ?? "",
-    discountThreshold: typeof body.discountThreshold === "number" && body.discountThreshold > 0 ? body.discountThreshold : null,
-    thresholdNote: body.thresholdNote?.trim() ?? "",
+    accountNumber: body.accountNumber?.trim() ?? "",
   });
   return NextResponse.json({ supplier }, { status: 201 });
 }

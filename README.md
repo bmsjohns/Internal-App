@@ -168,7 +168,7 @@ GitHub repo → Vercel import → env vars: `DATA_SOURCE=airtable`,
 `AIRTABLE_BASE_ID=appAlp6BBobAiV0d6`, `AIRTABLE_HAS_NEW_FIELDS`, the two Clerk
 keys, and only the schema flags whose migrations have been verified. See the
 migration documents before enabling `EVENTS_AIRTABLE_HAS_PHASE2`,
-`EVENTS_AIRTABLE_HAS_EVENT_LOCATION`, or `AIRTABLE_HAS_ORDER_LINES`.
+or `EVENTS_AIRTABLE_HAS_EVENT_LOCATION`.
 
 > **Licensing note (spec §10):** Vercel Hobby is licensed for
 > personal/non-commercial use. A business is nominally meant to be on Pro
@@ -346,23 +346,6 @@ sandbox-first runbook — is in
 the running-order/staffing editors are read-only with a notice (mock mode
 is fully editable). `Date and Time` maps to the app's date + time in
 **Europe/London** both ways, so 7.30pm stays 7.30pm wherever the server runs.
-
-## Ordering Hub
-
-`/to-order` is the shared Ordering Hub. It projects existing Customer Orders
-into the generic `OrderLine` shape and persists manually scanned Restock
-lines. Ordinary customer orders and restock are grouped into the Batchline
-decision-support view; only genuine checked Special Orders enter the
-rep-send view. Supplier settings now hold per-location accounts, rep contact
-details, and optional batching thresholds. Email actions open an editable
-draft and CSV remains an explicit download—neither sends silently.
-
-Event, School, and Book Club are valid model sources but intentionally not
-fabricated before those source modules exist. The sandbox-first schema and
-enablement steps are in
-[docs/ordering-hub-migration.md](docs/ordering-hub-migration.md). Customer
-Orders work before that migration; Restock entry is disabled against Airtable
-until `AIRTABLE_HAS_ORDER_LINES=true`.
 
 ## Open questions for Ben
 

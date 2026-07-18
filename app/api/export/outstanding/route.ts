@@ -32,20 +32,16 @@ export async function GET() {
   for (const name of names) {
     // Sheet names: max 31 chars, no \ / ? * [ ] :
     const ws = wb.addWorksheet(name.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Sheet");
-    const supplier = suppliers.find((s) => s.name === name);
+    const account = suppliers.find((s) => s.name === name)?.accountNumber ?? "";
     ws.columns = [
       { header: "Title", key: "title", width: 42 },
       { header: "ISBN", key: "isbn", width: 16 },
       { header: "Quantity", key: "qty", width: 10 },
-      { header: "Location", key: "location", width: 16 },
       { header: "Account number", key: "account", width: 18 },
     ];
     ws.getRow(1).font = { bold: true };
     for (const o of bySupplier.get(name)!) {
-      const account = o.location === "Prologue"
-        ? supplier?.accountNumberPrologue
-        : supplier?.accountNumberSimply || supplier?.accountNumber;
-      ws.addRow({ title: o.bookTitle, isbn: o.isbn, qty: o.quantity, location: o.location, account: account ?? "" });
+      ws.addRow({ title: o.bookTitle, isbn: o.isbn, qty: o.quantity, account });
     }
   }
   if (names.length === 0) {

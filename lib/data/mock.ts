@@ -1,4 +1,4 @@
-import type { Customer, CustomerInput, Order, OrderInput, OrderLine, OrderLineInput, Supplier, SupplierInput } from "@/lib/types";
+import type { Customer, CustomerInput, Order, OrderInput, Supplier, SupplierInput } from "@/lib/types";
 import type { DataSource } from "./source";
 
 // In-memory store used for development and testing so the live Airtable base
@@ -18,14 +18,9 @@ const seedCustomers = (): Customer[] => [
 ];
 
 const seedSuppliers = (): Supplier[] => [
-  { id: "supA1", name: "Gardners", cadence: "Same day", accountNumber: "GAR-30412", accountNumberSimply: "GAR-30412", accountNumberPrologue: "GAR-P-4410", repName: "", repEmail: "", discountThreshold: 10, thresholdNote: "10+ copies qualifies for the next discount tier" },
-  { id: "supA2", name: "Penguin Random House", cadence: "Tue & Thu", accountNumber: "PRH-88210", accountNumberSimply: "PRH-88210", accountNumberPrologue: "PRH-P-2208", repName: "Alex Morgan", repEmail: "alex@example.com", discountThreshold: 12, thresholdNote: "Batch to 12 copies where timing allows" },
-  { id: "supA3", name: "Faber Factory", cadence: "Weekly (Fri)", accountNumber: "FAB-1174", accountNumberSimply: "FAB-1174", accountNumberPrologue: "FAB-P-1175", repName: "Sam Taylor", repEmail: "sam@example.com", discountThreshold: null, thresholdNote: "Weekly Friday order" },
-];
-
-const seedOrderLines = (): OrderLine[] => [
-  { id: "lineA1", bookTitle: "The Midnight Library", author: "Matt Haig", isbn: "9781786892737", publisher: "Gardners", imprint: "Canongate", quantity: 4, price: 9.99, source: "Restock", sourceRef: null, location: "Simply Books", status: "Not yet ordered", fulfillmentMethod: "Batchline", actionedAt: null, actionedBy: "", createdAt: daysAgo(0, 4) },
-  { id: "lineA2", bookTitle: "Small Things Like These", author: "Claire Keegan", isbn: "9780571368709", publisher: "Gardners", imprint: "Faber", quantity: 3, price: 8.99, source: "Restock", sourceRef: null, location: "Prologue", status: "Not yet ordered", fulfillmentMethod: "Batchline", actionedAt: null, actionedBy: "", createdAt: daysAgo(1) },
+  { id: "supA1", name: "Gardners", cadence: "Same day", accountNumber: "GAR-30412" },
+  { id: "supA2", name: "Penguin Random House", cadence: "Tue & Thu", accountNumber: "PRH-88210" },
+  { id: "supA3", name: "Faber Factory", cadence: "Weekly (Fri)", accountNumber: "FAB-1174" },
 ];
 
 type OrderSeed = Omit<Order, "publisher" | "price" | "quantity" | "statusLog"> &
@@ -53,10 +48,10 @@ const seedOrders = (): Order[] => ([
 // Next dev compiles each route into its own bundle, so plain module state
 // would give every API route a separate copy. Stash the store on globalThis
 // so all routes (and HMR reloads) share one instance.
-type Store = { orders: Order[]; orderLines: OrderLine[]; customers: Customer[]; suppliers: Supplier[]; seq: number };
+type Store = { orders: Order[]; customers: Customer[]; suppliers: Supplier[]; seq: number };
 const g = globalThis as typeof globalThis & { __orderBookMock?: Store };
-if (!g.__orderBookMock || !g.__orderBookMock.suppliers || !g.__orderBookMock.orderLines) {
-  const store: Store = { orders: seedOrders(), orderLines: seedOrderLines(), customers: seedCustomers(), suppliers: seedSuppliers(), seq: 100 };
+if (!g.__orderBookMock || !g.__orderBookMock.suppliers) {
+  const store: Store = { orders: seedOrders(), customers: seedCustomers(), suppliers: seedSuppliers(), seq: 100 };
   for (const o of store.orders) {
     for (const c of o.customerIds) {
       store.customers.find((x) => x.id === c)?.orderIds.push(o.id);
@@ -64,7 +59,7 @@ if (!g.__orderBookMock || !g.__orderBookMock.suppliers || !g.__orderBookMock.ord
   }
   g.__orderBookMock = store;
 }
-const { orders, orderLines, customers, suppliers } = g.__orderBookMock;
+const { orders, customers, suppliers } = g.__orderBookMock;
 const id = (p: string) => `${p}${g.__orderBookMock!.seq++}`;
 
 function attach(o: Order): Order {
@@ -100,21 +95,6 @@ export const mockDataSource: DataSource = {
   async deleteOrder(oid) {
     const i = orders.findIndex((x) => x.id === oid);
     if (i >= 0) orders.splice(i, 1);
-  },
-
-  async listOrderLines() {
-    return orderLines.map((line) => ({ ...line }));
-  },
-  async createOrderLine(input: OrderLineInput) {
-    const line: OrderLine = { ...input, id: id("line"), actionedAt: null, actionedBy: "", createdAt: new Date().toISOString() };
-    orderLines.unshift(line);
-    return { ...line };
-  },
-  async updateOrderLine(lineId, input) {
-    const line = orderLines.find((item) => item.id === lineId);
-    if (!line) throw new Error("Order line not found");
-    Object.assign(line, input);
-    return { ...line };
   },
 
   async listCustomers() {

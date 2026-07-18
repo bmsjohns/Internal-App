@@ -1,9 +1,11 @@
-# Order Book — internal ops platform
+# Backstage — internal ops platform
 
 Internal ops platform for **Simply Books** (Bramhall) and **Prologue Books**
-(Weir Mill, Stockport). Modules so far: **Customer Orders** (V3) and **Events
-Phase 1: Pitching** (see §Events below). Next.js 15 (App Router) · Clerk ·
-Airtable · Tailwind 4, deployed on Vercel.
+(Weir Mill, Stockport) — formerly "Order Book", renamed **Backstage** now it
+spans more than orders. Modules so far: **Daily Briefing** (the landing
+page — see §Daily Briefing), **Customer Orders** (V3) and **Events Phases
+1–2** (see §Events below). Next.js 15 (App Router) · Clerk · Airtable ·
+Tailwind 4, deployed on Vercel.
 
 ## Running locally
 
@@ -351,6 +353,54 @@ the running-order/staffing editors are read-only with a notice (mock mode
 is fully editable). `Date and Time` maps to the app's date + time in
 **Europe/London** both ways, so 7.30pm stays 7.30pm wherever the server runs.
 
+## Daily Briefing (default landing page)
+
+Built from `daily-briefing-spec.md` + the Claude Design file
+**"Daily Briefing.dc.html"** (same design project as V2). Where the design
+went beyond the spec — urgent alerts with in-page posting, a celebrations
+band, an Overview/Full-day detail toggle, per-venue stat tiles and opening
+hours, collapsible wrap-up bands, a Slack new-message banner — the design
+was treated as authoritative and built as drawn.
+
+- **Route**: `/briefing`, the default redirect from `/`. Visible to every
+  logged-in user (spec §9 default — no extra permission).
+- **Layout**: two brand columns (Prologue terracotta / Simply Books teal
+  `#378573`), row-aligned on desktop, stacked one-venue-at-a-time on
+  mobile. Location toggle shares the sidebar's venue switcher (persisted);
+  the Detail toggle persists per device (`db-view`).
+- **Data seam**: `lib/data/briefing*` — same pattern as Orders/Events. The
+  mock supplies everything until integrations are configured; Deputy
+  (roster + tasks, 10-min cache with "as of HH.MM") and Slack (read-only
+  day-scoped chatter) overlay per-section via the env vars in
+  `.env.example`. **Both adapters are written but unverified** — they need
+  a Deputy permanent token and a Slack bot invited to `#pro-on-shift` /
+  `#sb-on-shift`, which only Ben can provision (spec §2/§8). Field names
+  should be confirmed against the live Deputy account on first connect
+  (spec §9).
+- **Weather**: live Open-Meteo (free, keyless), Stockport, 30-min cache;
+  the pill simply hides if the forecast is unavailable.
+- **Events**: read through the existing Events data source and filtered to
+  the selected date server-side (`/api/briefing`), so briefing readers
+  don't need `events:view`. Cards link into `/events/[id]` (which still
+  enforces its own permission).
+- **Wrap-ups + urgent alerts persist to the "Backstage" Airtable base**
+  (general-purpose base for app features that need storage outside the
+  Orders/Events bases; tables `Briefing Wrap-ups` and `Briefing Alerts` —
+  schema in `lib/data/briefing-airtable.ts`). Set
+  `BACKSTAGE_AIRTABLE_BASE_ID` (and give the Airtable token access to the
+  base) to switch it on; until then they fall back to in-memory mock
+  state, which resets on restart and won't persist on Vercel's serverless
+  runtime. Alert dismissal flags `Dismissed` rather than deleting, so the
+  base keeps an audit trail. Task ticks in mock mode are also in-memory;
+  once Deputy is connected they write back to Deputy instead.
+- **Deliberately not built** (spec §4/§7): no parallel in-app task system
+  (Deputy's tasks or nothing), and no auto-post of wrap-ups to Slack —
+  whether the Slack post continues is an open question below.
+- Staff **milestones/birthdays** (§6) currently come from mock data; the
+  Deputy Employee fields (start date / DOB) need checking before wiring
+  them live, plus the privacy note in the spec (show "birthday today",
+  never the full DOB).
+
 ## Open questions for Ben
 
 1. **One visual language or two?** The app is Prologue-branded overall with
@@ -362,3 +412,14 @@ is fully editable). `Date and Time` maps to the app's date + time in
    (lib/config.ts) is the right definition of "needs ordering" for the
    end-of-day list.
 4. Vercel Hobby vs Pro (licensing note above).
+5. **Daily Briefing setup** (all blocked on Ben): a Deputy permanent token
+   + the Deputy location/OperationalUnit ids for each venue; a Slack bot
+   token invited to `#pro-on-shift` and `#sb-on-shift`; and where wrap-ups
+   / urgent alerts should persist (suggest a small Airtable table — see
+   §Daily Briefing).
+6. **Wrap-up → Slack**: keep the manual Slack post going, replace it with
+   the in-app wrap-up, or run both during a transition (spec §7)? And is
+   the wrap-up per-venue (as built, matching the design) or shared?
+7. **Simply Books venue colour** app-wide changed from the old navy
+   stand-in to the brand teal `#378573` (spec §0) — flag if any screen
+   looks off with it.

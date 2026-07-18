@@ -13,6 +13,7 @@ const ic = (p: string) => (
 );
 
 const MODULES = [
+  { href: "/briefing", label: "Daily Briefing", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h9M8 13h9M8 17h6"/>' },
   { href: "/orders", label: "Orders", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>' },
   { href: "/customers", label: "Customers", icon: '<circle cx="12" cy="8" r="4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>' },
   { href: "/to-order", label: "To order", icon: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>' },
@@ -112,7 +113,7 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
         <div className="flex items-center gap-3 border-b border-cream-2 px-5 pb-[18px] pt-[22px]">
           <Image src="/assets/p-mark-red.png" alt="Prologue" width={30} height={40} className="h-[30px] w-auto object-contain" />
           <div className="leading-tight">
-            <div className="font-display text-[19px] text-ink">Order Book</div>
+            <div className="font-display text-[19px] text-ink">Backstage</div>
             <div className="eyebrow mt-0.5 text-stone">Ops platform</div>
           </div>
         </div>

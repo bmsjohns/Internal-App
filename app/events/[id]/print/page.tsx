@@ -221,7 +221,7 @@ export default function CallSheetPrintPage({ params }: { params: Promise<{ id: s
         {/* footer */}
         <div className="flex items-center justify-between border-t border-cream-2 px-7 pb-8 pt-4 sm:px-11">
           <div className="max-w-[420px] text-[11px] leading-relaxed text-stone">
-            Prologue · Order Book — generated for this event. Questions on the day: call the host or the
+            Prologue · Backstage — generated for this event. Questions on the day: call the host or the
             events lead.
           </div>
           <Image src="/assets/bird-perched.png" alt="" width={54} height={44} className="h-11 w-auto object-contain opacity-90" />

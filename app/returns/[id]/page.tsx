@@ -15,7 +15,7 @@ import {
   returnStatusMeta,
   returnUnits,
   routeLabel,
-  waitingDays,
+  workingDaysSince,
 } from "@/lib/returns";
 import { money } from "@/lib/clubs";
 import { post, useReturnsData } from "@/components/clubs/data";
@@ -253,8 +253,8 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
             <path d="M12 10v4M12 16.5v.5" />
           </svg>
           {r.status === "awaiting"
-            ? `Awaiting RA for ${waitingDays(r)} days — chase ${gardners ? "Gardners" : `${pub?.repName ?? "the rep"} at ${pub?.name ?? "the publisher"}`}.`
-            : `Shipped ${waitingDays(r)} days ago, still no credit — chase the publisher's credit note.`}
+            ? `Awaiting RA for ${workingDaysSince(r.dateSubmitted ?? r.dateRequested)} working days — chase ${gardners ? "Gardners" : `${pub?.repName ?? "the rep"} at ${pub?.name ?? "the publisher"}`}.`
+            : `Shipped ${workingDaysSince(r.dateShipped)} working days ago, still no credit — chase the publisher's credit note.`}
         </div>
       )}
 

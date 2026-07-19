@@ -542,10 +542,11 @@ them.
 - **Outstanding** (`/returns`) is the "what are we waiting on" view:
   search, chip filters (status/origin/route), sortable columns, CSV
   export, est. credit total (RRP less the publisher's restock discount —
-  Hub rates reused), and **overdue flags**: awaiting an RA >
-  `AWAITING_OVERDUE_DAYS` (10) or shipped with no credit >
-  `SHIPPED_OVERDUE_DAYS` (21) shows a red chase banner naming the rep.
-  Both thresholds TBC with Ben.
+  Hub rates reused), and **overdue flags** (Ben, 19 Jul): awaiting an RA
+  > **3 working days** (`AWAITING_OVERDUE_WORKING_DAYS`) or shipped with
+  no credit > **5 working days** (`SHIPPED_OVERDUE_WORKING_DAYS`) shows a
+  red chase banner naming the rep. Working days = Mon–Fri; weekends never
+  trigger a chase.
 - **Event-originated returns** carry origin metadata (event name, verified
   by) end-to-end and show a distinct Event pill; Phase 6 reconciliation
   should POST `/api/returns` `action:create` with `origin:"event"` — the

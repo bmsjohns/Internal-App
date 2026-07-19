@@ -56,10 +56,27 @@ export function routeLabel(route: ReturnRoute): string {
 // reached — the outstanding view answers "how long have we been stuck here".
 // ---------------------------------------------------------------------------
 
-/** Awaiting an RA longer than this ⇒ chase the rep (spec: flag age). */
-export const AWAITING_OVERDUE_DAYS = 10;
-/** Shipped with no credit note after this ⇒ chase the credit. */
-export const SHIPPED_OVERDUE_DAYS = 21;
+/** Awaiting an RA longer than this ⇒ chase the rep (Ben, 19 Jul 2026). */
+export const AWAITING_OVERDUE_WORKING_DAYS = 3;
+/** Shipped with no credit note after this ⇒ chase the credit (Ben, 19 Jul 2026). */
+export const SHIPPED_OVERDUE_WORKING_DAYS = 5;
+
+/** Working days (Mon–Fri) elapsed since a date — each weekday strictly
+ *  after `iso`, up to and including today. Publisher offices don't move
+ *  on weekends, so chase thresholds count these, not calendar days. */
+export function workingDaysSince(iso: string | null, now = Date.now()): number {
+  if (!iso) return 0;
+  const end = new Date(now).toISOString().slice(0, 10);
+  const cur = new Date(iso + "T12:00:00");
+  let count = 0;
+  for (;;) {
+    cur.setDate(cur.getDate() + 1);
+    if (cur.toISOString().slice(0, 10) > end) break;
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
 
 export function statusDate(r: ReturnRequest): string | null {
   switch (r.status) {
@@ -84,8 +101,9 @@ export function waitingDays(r: ReturnRequest, now = Date.now()): number {
 }
 
 export function isReturnOverdue(r: ReturnRequest, now = Date.now()): boolean {
-  if (r.status === "awaiting") return waitingDays(r, now) > AWAITING_OVERDUE_DAYS;
-  if (r.status === "shipped") return waitingDays(r, now) > SHIPPED_OVERDUE_DAYS;
+  if (r.status === "awaiting")
+    return workingDaysSince(r.dateSubmitted ?? r.dateRequested, now) > AWAITING_OVERDUE_WORKING_DAYS;
+  if (r.status === "shipped") return workingDaysSince(r.dateShipped, now) > SHIPPED_OVERDUE_WORKING_DAYS;
   return false;
 }
 

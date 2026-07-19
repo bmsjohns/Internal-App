@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HubPublisher, ReturnLine, ReturnRequest } from "@/lib/types";
 import {
-  AWAITING_OVERDUE_DAYS,
-  SHIPPED_OVERDUE_DAYS,
   estimatedCredit,
   groupStaging,
   isReturnOverdue,
@@ -14,6 +12,7 @@ import {
   routeLabel,
   statusIndex,
   waitingDays,
+  workingDaysSince,
 } from "@/lib/returns";
 
 const daysAgo = (d: number) => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
@@ -87,13 +86,25 @@ describe("waiting & overdue", () => {
   it("is zero once credit is confirmed", () => {
     expect(waitingDays(req({ status: "credit", dateCreditConfirmed: daysAgo(2) }))).toBe(0);
   });
-  it("flags an awaiting return past the RA threshold", () => {
-    expect(isReturnOverdue(req({ dateSubmitted: daysAgo(AWAITING_OVERDUE_DAYS + 1) }))).toBe(true);
-    expect(isReturnOverdue(req({ dateSubmitted: daysAgo(AWAITING_OVERDUE_DAYS - 1) }))).toBe(false);
+  // Fixed 2026 dates: Mon 13 Jul … Sun 19 Jul (13th is a Monday).
+  const at = (iso: string) => new Date(iso + "T12:00:00Z").getTime();
+  it("counts working days, skipping weekends", () => {
+    expect(workingDaysSince("2026-07-13", at("2026-07-16"))).toBe(3); // Tue+Wed+Thu
+    expect(workingDaysSince("2026-07-17", at("2026-07-20"))).toBe(1); // Fri→Mon: weekend skipped
+    expect(workingDaysSince("2026-07-17", at("2026-07-19"))).toBe(0); // Fri→Sun: nothing yet
+    expect(workingDaysSince(null)).toBe(0);
   });
-  it("flags a shipped return with no credit after three weeks", () => {
-    const shipped = req({ status: "shipped", dateShipped: daysAgo(SHIPPED_OVERDUE_DAYS + 1) });
-    expect(isReturnOverdue(shipped)).toBe(true);
+  it("flags an awaiting return after 3 working days, not calendar days", () => {
+    const submittedMon = req({ dateSubmitted: "2026-07-13" });
+    expect(isReturnOverdue(submittedMon, at("2026-07-16"))).toBe(false); // Thu = 3 wd, on the line
+    expect(isReturnOverdue(submittedMon, at("2026-07-17"))).toBe(true); // Fri = 4 wd
+    const submittedThu = req({ dateSubmitted: "2026-07-16" });
+    expect(isReturnOverdue(submittedThu, at("2026-07-19"))).toBe(false); // Sun = only Fri counted
+  });
+  it("flags a shipped return after 5 working days with no credit", () => {
+    const shippedMon = req({ status: "shipped", dateShipped: "2026-07-06" });
+    expect(isReturnOverdue(shippedMon, at("2026-07-13"))).toBe(false); // next Mon = 5 wd
+    expect(isReturnOverdue(shippedMon, at("2026-07-14"))).toBe(true); // Tue = 6 wd
   });
   it("never flags requested or credited returns", () => {
     expect(isReturnOverdue(req({ status: "requested", dateRequested: daysAgo(99) }))).toBe(false);

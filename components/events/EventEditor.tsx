@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ShowEvent, ShowEventInput } from "@/lib/types";
+import type { EventOperationsPreview } from "@/lib/event-operations";
 import { LOCATIONS } from "@/lib/types";
 import { EVENT_STATUSES, eventStaffIds, eventStatus } from "@/lib/events";
 import { btnDanger, btnGhost, btnPrimary } from "@/components/PageHeader";
@@ -11,6 +12,14 @@ import { Chevron, inputCls, labelCls, panelCls, panelHead, selectCls, selectWrap
 import { EventStatusChip } from "./chips";
 import RunningOrderTab from "./RunningOrderTab";
 import StaffingTab from "./StaffingTab";
+import {
+  EventReadinessStrip,
+  EventResultsTab,
+  EventStockTab,
+  EventTasksTab,
+  EventTicketsTab,
+  PreviewModeNotice,
+} from "./EventOperationsPreview";
 
 export interface EventsMeta {
   me: { id: string; name: string };
@@ -24,7 +33,7 @@ export interface EventsMeta {
   eventLocationReady: boolean;
 }
 
-type Tab = "general" | "show" | "running" | "staffing" | "orders";
+type Tab = "general" | "show" | "tasks" | "tickets" | "running" | "staffing" | "orders" | "results";
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 const ic = (p: string, size = 15) => (
@@ -44,11 +53,13 @@ export default function EventEditor({
   meta,
   isNew,
   fromPitchRef,
+  operations,
 }: {
   initial: ShowEvent;
   meta: EventsMeta;
   isNew: boolean;
   fromPitchRef?: string;
+  operations?: EventOperationsPreview;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<ShowEvent>(initial);
@@ -56,6 +67,7 @@ export default function EventEditor({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [operationsPreview, setOperationsPreview] = useState(operations);
 
   // ----- optimistic autosave (existing events) -----
   const pending = useRef<Partial<ShowEventInput>>({});
@@ -181,12 +193,18 @@ export default function EventEditor({
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "general", label: "General" },
     { key: "show", label: "Show details" },
+    ...(operationsPreview ? [
+      { key: "tasks" as const, label: "Tasks", count: operationsPreview.tasks.filter((task) => task.status !== "done").length },
+      { key: "tickets" as const, label: "Tickets", count: operationsPreview.luma.connected ? operationsPreview.luma.approved : undefined },
+    ] : []),
     { key: "running", label: "Running order", count: draft.schedule.length },
     { key: "staffing", label: "Staffing", count: staffCount },
     { key: "orders", label: "Book orders" },
+    ...(operationsPreview ? [{ key: "results" as const, label: "Results" }] : []),
   ];
 
-  const disabled = !meta.canEdit;
+  const disabled = !meta.canEdit || Boolean(operationsPreview);
+  const previewMeta = operationsPreview ? { ...meta, canEdit: false } : meta;
   const numVal = (n: number | null) => (n === null ? "" : String(n));
   const setNum = (key: "bookTicket" | "ticketOnly" | "minOrder") => (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value.trim();
@@ -260,7 +278,13 @@ export default function EventEditor({
       </div>
       </div>
 
-      <div className="w-full max-w-[1180px] px-4 pb-14 pt-6 sm:px-8">
+      <div className="w-full max-w-[1180px] px-4 pb-14 pt-[76px] sm:px-8 lg:pt-6">
+        {operationsPreview && (
+          <div className="mb-5 flex flex-col gap-3">
+            <PreviewModeNotice />
+            <EventReadinessStrip operations={operationsPreview} />
+          </div>
+        )}
         {!meta.canEdit && (
           <div className="mb-4 rounded-lg border border-cream-2 bg-white px-4 py-3 text-[13px] text-charcoal">
             Read-only access — ask an Events editor if this record needs changing.
@@ -423,7 +447,7 @@ export default function EventEditor({
                 <label className={labelCls} htmlFor="ev-min">Minimum order</label>
                 <input id="ev-min" inputMode="numeric" value={numVal(draft.minOrder)} onChange={setNum("minOrder")} className={inputCls} disabled={disabled} />
               </div>
-              {!isNew && meta.canEdit && (
+              {!isNew && meta.canEdit && !operationsPreview && (
                 <button onClick={remove} className={btnDanger}>
                   Delete event
                 </button>
@@ -543,10 +567,20 @@ export default function EventEditor({
         )}
 
         {/* ============ RUNNING ORDER ============ */}
+        {tab === "tasks" && operationsPreview && (
+          <EventTasksTab
+            tasks={operationsPreview.tasks}
+            onChange={(tasks) => setOperationsPreview((current) => current ? { ...current, tasks } : current)}
+          />
+        )}
+
+        {tab === "tickets" && operationsPreview && <EventTicketsTab initial={operationsPreview.luma} />}
+
+        {/* ============ RUNNING ORDER ============ */}
         {tab === "running" && (
           <RunningOrderTab
             draft={draft}
-            meta={meta}
+            meta={previewMeta}
             onChange={(schedule) => set("schedule", schedule)}
             goStaffing={() => setTab("staffing")}
           />
@@ -556,7 +590,7 @@ export default function EventEditor({
         {tab === "staffing" && (
           <StaffingTab
             draft={draft}
-            meta={meta}
+            meta={previewMeta}
             onChange={(roles) => set("roles", roles)}
             goRunning={() => setTab("running")}
           />
@@ -564,6 +598,9 @@ export default function EventEditor({
 
         {/* ============ BOOK ORDERS ============ */}
         {tab === "orders" && (
+          operationsPreview ? (
+            <EventStockTab stock={operationsPreview.stock} luma={operationsPreview.luma} />
+          ) : (
           <div className="flex max-w-[940px] flex-col gap-4">
             <div className="flex items-start gap-2.5 rounded-lg border border-cream-2 bg-cream px-4 py-3.5 text-[12.5px] text-charcoal">
               <span className="mt-px text-rust">{ic('<path d="M4 21V4"/><path d="M4 4h13l-2.5 4L17 12H4"/>', 15)}</span>
@@ -601,7 +638,10 @@ export default function EventEditor({
               </div>
             </div>
           </div>
+          )
         )}
+
+        {tab === "results" && operationsPreview && <EventResultsTab operations={operationsPreview} />}
       </div>
     </div>
   );

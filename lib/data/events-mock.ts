@@ -406,7 +406,7 @@ const EVENTS: ShowEvent[] = [
     ],
     schedule: [],
     legacyStaffing: ["Ben", "Chloe", "Liv"],
-    bookTicket: 0, ticketOnly: 40, minOrder: 0, lumaLink: "", banners: false,
+    bookTicket: 0, ticketOnly: 40, minOrder: 0, lumaLink: "https://lu.ma/anderson-prologue", banners: false,
     callSheet: [], callSheetSent: false, salesReportSent: true, mediaCount: 0,
     notes: "Local author. Cheap to run, good community goodwill.",
     createdAt: "2026-05-30T10:00:00.000Z",
@@ -440,7 +440,7 @@ const EVENTS: ShowEvent[] = [
     createdAt: "2026-07-01T10:00:00.000Z",
   },
   {
-    id: "ev-bookclub", name: "First Chapter Club", leadTitle: "Monthly book club night", isbn: "",
+    id: "ev-first-chapter", name: "First Chapter Club", leadTitle: "Monthly book club night", isbn: "",
     date: daysFromNow(8), time: "19:00", venueId: "ven-prologue-cafe", venueName: "Prologue — café floor",
     hostId: "host-inhouse", hostName: "In-house (Ben)",
     types: ["Book Club Exclusive"], ages: [],

@@ -48,6 +48,15 @@ interface LumaGuestRecord {
   }>;
 }
 
+function finiteNumber(value: unknown, fallback = 0): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function safeString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
 export class LumaApiError extends Error {
   constructor(message: string, readonly status = 500) {
     super(message);
@@ -149,6 +158,7 @@ async function verifiedCalendars(): Promise<LumaCalendarConfig[]> {
   const verified = await Promise.all(configured.map(async (calendar) => {
     if (!calendar.active) return calendar;
     const actual = await lumaRequest<LumaCalendarRecord>(calendar, "/v1/calendars/get");
+    if (!safeString(actual.name)) throw new LumaApiError("Luma returned an invalid calendar response.", 502);
     const expectedName = normalizedCalendarName(calendar.name);
     const actualName = normalizedCalendarName(actual.name);
     if (actualName !== expectedName) {
@@ -205,7 +215,7 @@ async function listAllGuests(calendar: LumaCalendarConfig, eventId: string): Pro
     const query = new URLSearchParams({ event_id: eventId, pagination_limit: "100" });
     if (cursor) query.set("pagination_cursor", cursor);
     const result = await lumaRequest<{ entries: LumaGuestRecord[]; has_more: boolean; next_cursor?: string }>(calendar, `/v1/events/guests/list?${query}`);
-    guests.push(...result.entries);
+    guests.push(...(Array.isArray(result.entries) ? result.entries : []));
     if (!result.has_more || !result.next_cursor) break;
     cursor = result.next_cursor;
   }
@@ -256,17 +266,18 @@ export async function getLiveLumaPreview(event: ShowEvent): Promise<LumaPreview>
       if ((ticket.amount ?? 0) === 0) complimentary += 1;
     }
   }
-  const ticketTypes: LumaTicketTypePreview[] = ticketResult.entries.map((ticket, index) => ({
-    id: ticket.id,
-    name: ticket.name,
-    price: ticket.type === "paid" ? (ticket.cents ?? 0) / 100 : 0,
-    issued: ticketCounts.get(ticket.id)?.issued ?? 0,
-    checkedIn: ticketCounts.get(ticket.id)?.checkedIn ?? 0,
+  const ticketTypes: LumaTicketTypePreview[] = (Array.isArray(ticketResult.entries) ? ticketResult.entries : []).map((ticket, index) => ({
+    id: safeString(ticket.id, `ticket-${index + 1}`),
+    name: safeString(ticket.name, "Ticket"),
+    price: ticket.type === "paid" ? finiteNumber(ticket.cents) / 100 : 0,
+    issued: finiteNumber(ticketCounts.get(ticket.id)?.issued),
+    checkedIn: finiteNumber(ticketCounts.get(ticket.id)?.checkedIn),
     color: TICKET_COLORS[index % TICKET_COLORS.length],
   }));
-  const counts = resolved.event.guest_counts;
-  const remaining = Math.max(0, resolved.event.spots_remaining ?? 0);
-  const capacity = Math.max(counts.approved, counts.approved + remaining, ...ticketResult.entries.map((ticket) => ticket.max_capacity ?? 0));
+  const counts = resolved.event.guest_counts ?? { approved: 0, pending_approval: 0, waitlist: 0, invited: 0, declined: 0, checked_in: 0 };
+  const approved = Math.max(0, finiteNumber(counts.approved));
+  const remaining = Math.max(0, finiteNumber(resolved.event.spots_remaining));
+  const capacity = Math.max(approved, approved + remaining, ...ticketTypes.map((_, index) => finiteNumber(ticketResult.entries[index]?.max_capacity)));
   const ended = new Date(resolved.event.end_at).getTime() < Date.now();
   const calendar = calendars.find((candidate) => candidate.id === resolved.calendar.id)!;
   return {
@@ -279,12 +290,12 @@ export async function getLiveLumaPreview(event: ShowEvent): Promise<LumaPreview>
     availableCalendars: calendars,
     status: ended ? "ended" : !resolved.event.registration_open ? "draft" : remaining === 0 && capacity > 0 ? "sold_out" : "on_sale",
     capacity,
-    approved: counts.approved,
-    pending: counts.pending_approval,
-    waitlist: counts.waitlist,
-    declined: counts.declined,
+    approved,
+    pending: Math.max(0, finiteNumber(counts.pending_approval)),
+    waitlist: Math.max(0, finiteNumber(counts.waitlist)),
+    declined: Math.max(0, finiteNumber(counts.declined)),
     complimentary,
-    checkedIn: counts.checked_in,
+    checkedIn: Math.max(0, finiteNumber(counts.checked_in)),
     lastSyncedAt: new Date().toISOString(),
     ticketTypes,
   };
@@ -354,4 +365,4 @@ export function verifyLumaWebhook(rawBody: string, signatureHeader: string, secr
   return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
 }
 
-export const lumaInternals = { normalizedCalendarName, normalizedLumaUrl, zonedDateTimeToUtc };
+export const lumaInternals = { finiteNumber, normalizedCalendarName, normalizedLumaUrl, safeString, zonedDateTimeToUtc };

@@ -26,6 +26,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const luma = await getLiveLumaPreview(event);
     return NextResponse.json({ operations: getEventOperationsPreview(event, luma), source: "live-luma" });
   } catch (error) {
+    console.error("[luma] event sync fell back to safe preview", {
+      eventId: event.id,
+      error: error instanceof Error ? error.message : "Unknown Luma error",
+    });
     const operations = getEventOperationsPreview(event);
     operations.luma.integration = "error";
     operations.luma.canCreate = true;

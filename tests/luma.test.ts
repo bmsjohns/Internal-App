@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import { isLumaLive, lumaInternals, publicLumaCalendars, verifyLumaWebhook } from "@/lib/luma";
 
 describe("Luma integration safety", () => {
+  it("normalizes non-finite API numbers before they reach the client", () => {
+    expect(lumaInternals.finiteNumber("1250")).toBe(1250);
+    expect(lumaInternals.finiteNumber(undefined)).toBe(0);
+    expect(lumaInternals.finiteNumber(Number.NaN)).toBe(0);
+  });
+
   it("only exposes the two real shop calendars", () => {
     expect(publicLumaCalendars().map(({ id, name, location }) => ({ id, name, location }))).toEqual([
       { id: "simply", name: "Simply Books", location: "Simply Books" },

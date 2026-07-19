@@ -14,6 +14,7 @@ import { panelCls, panelHead } from "@/components/form";
 const rust = "#AD3B28";
 const gold = "#B0812F";
 const green = "#5F7355";
+const TICKET_COLORS = [rust, gold, green, "#3D6670", "#6C5A82"];
 
 const icon = (path: string, size = 16) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: path }} />
@@ -172,10 +173,23 @@ export function EventTicketsTab({ initial, backstageEventId, canEdit }: { initia
   const [syncing, setSyncing] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [message, setMessage] = useState("");
-  const [calendarId, setCalendarId] = useState(initial.calendar.id);
-  const issued = luma.ticketTypes.reduce((sum, ticket) => sum + ticket.issued, 0);
-  const available = Math.max(0, luma.capacity - issued);
-  const sellThrough = luma.capacity ? Math.round((issued / luma.capacity) * 100) : 0;
+  const [calendarId, setCalendarId] = useState(initial.calendar?.id ?? "simply");
+  const calendars = Array.isArray(luma.availableCalendars) ? luma.availableCalendars : [];
+  const ticketTypes = (Array.isArray(luma.ticketTypes) ? luma.ticketTypes : []).map((ticket, index) => ({
+    id: typeof ticket?.id === "string" ? ticket.id : `ticket-${index + 1}`,
+    name: typeof ticket?.name === "string" ? ticket.name : "Ticket",
+    price: safeNumber(ticket?.price),
+    issued: Math.max(0, safeNumber(ticket?.issued)),
+    checkedIn: Math.max(0, safeNumber(ticket?.checkedIn)),
+    color: typeof ticket?.color === "string" ? ticket.color : TICKET_COLORS[index % TICKET_COLORS.length],
+  }));
+  const capacity = Math.max(0, safeNumber(luma.capacity));
+  const approved = Math.max(0, safeNumber(luma.approved));
+  const checkedIn = Math.max(0, safeNumber(luma.checkedIn));
+  const issued = ticketTypes.reduce((sum, ticket) => sum + ticket.issued, 0);
+  const available = Math.max(0, capacity - issued);
+  const sellThrough = capacity ? Math.round((issued / capacity) * 100) : 0;
+  const statusLabel = typeof luma.status === "string" ? luma.status.replace("_", " ") : "unknown";
 
   const sync = async () => {
     setSyncing(true);
@@ -225,7 +239,7 @@ export function EventTicketsTab({ initial, backstageEventId, canEdit }: { initia
         <div className="mx-auto mb-4 max-w-[360px] rounded-lg border border-cream-2 bg-cream px-3 py-2.5 text-left">
           <label className="eyebrow mb-1.5 block text-stone" htmlFor="preview-luma-calendar">Target calendar</label>
           <select id="preview-luma-calendar" disabled={!luma.canCreate || !canEdit || syncing} value={calendarId} onChange={(event) => setCalendarId(event.target.value)} className="w-full bg-transparent text-[13px] font-semibold text-charcoal outline-none disabled:opacity-65">
-            {luma.availableCalendars.map((calendar) => <option key={calendar.id} value={calendar.id} disabled={!calendar.active}>{calendar.name}{calendar.active ? " · connected" : " · key not configured"}</option>)}
+            {calendars.map((calendar) => <option key={calendar.id} value={calendar.id} disabled={!calendar.active}>{calendar.name}{calendar.active ? " · connected" : " · key not configured"}</option>)}
           </select>
         </div>
         {luma.canCreate && canEdit && (
@@ -248,7 +262,7 @@ export function EventTicketsTab({ initial, backstageEventId, canEdit }: { initia
         <div className="flex items-center gap-3">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5F735518] text-[#5F7355]">{icon('<path d="M8 12.5l2.5 2.5L16 9"/><circle cx="12" cy="12" r="9"/>', 18)}</span>
           <div>
-            <div className="text-[13px] font-semibold text-charcoal">Connected to {luma.calendar.name} · {luma.eventId}</div>
+            <div className="text-[13px] font-semibold text-charcoal">Connected to {luma.calendar?.name || "Luma"} · {luma.eventId || "event"}</div>
             <div className="mt-0.5 text-[11.5px] text-stone">{luma.integration === "live" ? "Live aggregate feed" : "Calendar-aware mock feed"} · synced {relativeTime(luma.lastSyncedAt)}</div>
           </div>
         </div>
@@ -261,10 +275,10 @@ export function EventTicketsTab({ initial, backstageEventId, canEdit }: { initia
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <MetricCard label="Registered" value={luma.approved} detail={`${sellThrough}% of capacity`} accent={rust} />
-        <MetricCard label="Available" value={available} detail={`${luma.capacity} total capacity`} accent={green} />
-        <MetricCard label="Waitlist" value={luma.waitlist} detail={luma.pending ? `${luma.pending} pending approval` : "No pending approvals"} accent={gold} />
-        <MetricCard label="Checked in" value={luma.checkedIn} detail={luma.approved ? `${Math.round((luma.checkedIn / luma.approved) * 100)}% of registered` : "Event not started"} accent="#3D6670" />
+        <MetricCard label="Registered" value={approved} detail={`${sellThrough}% of capacity`} accent={rust} />
+        <MetricCard label="Available" value={available} detail={`${capacity} total capacity`} accent={green} />
+        <MetricCard label="Waitlist" value={safeNumber(luma.waitlist)} detail={safeNumber(luma.pending) ? `${safeNumber(luma.pending)} pending approval` : "No pending approvals"} accent={gold} />
+        <MetricCard label="Checked in" value={checkedIn} detail={approved ? `${Math.round((checkedIn / approved) * 100)}% of registered` : "Event not started"} accent="#3D6670" />
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(260px,.75fr)]">
@@ -274,20 +288,20 @@ export function EventTicketsTab({ initial, backstageEventId, canEdit }: { initia
               <div className="font-display text-[18px]">Ticket mix</div>
               <div className="mt-0.5 text-xs text-stone">{luma.integration === "live" ? "Live registration totals from Luma" : "Registration totals from the mock Luma feed"}</div>
             </div>
-            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.12em] ${luma.status === "sold_out" ? "bg-shell text-rust" : "bg-[#5F735514] text-[#5F7355]"}`}>{luma.status.replace("_", " ")}</span>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.12em] ${luma.status === "sold_out" ? "bg-shell text-rust" : "bg-[#5F735514] text-[#5F7355]"}`}>{statusLabel}</span>
           </div>
           <div className="px-5 py-4">
             <div className="mb-5 flex h-3 overflow-hidden rounded-full bg-cream-2">
-              {luma.ticketTypes.map((ticket) => <span key={ticket.id} style={{ width: `${luma.capacity ? (ticket.issued / luma.capacity) * 100 : 0}%`, background: ticket.color }} />)}
+              {ticketTypes.map((ticket) => <span key={ticket.id} style={{ width: `${capacity ? (ticket.issued / capacity) * 100 : 0}%`, background: ticket.color }} />)}
             </div>
             <div className="flex flex-col">
-              {luma.ticketTypes.map((ticket) => (
+              {ticketTypes.map((ticket) => (
                 <div key={ticket.id} className="grid grid-cols-[minmax(0,1fr)_70px_90px] items-center border-b border-cream-2 py-3 last:border-0">
                   <div className="flex min-w-0 items-center gap-2.5">
                     <span className="h-2.5 w-2.5 rounded-full" style={{ background: ticket.color }} />
                     <div>
                       <div className="text-[13.5px] font-semibold">{ticket.name}</div>
-                      <div className="text-[11.5px] text-stone">{ticket.price ? `£${ticket.price.toFixed(2)}` : "Complimentary"}</div>
+                      <div className="text-[11.5px] text-stone">{ticket.price > 0 ? `£${ticket.price.toFixed(2)}` : "Complimentary"}</div>
                     </div>
                   </div>
                   <div className="text-right">
@@ -306,10 +320,10 @@ export function EventTicketsTab({ initial, backstageEventId, canEdit }: { initia
 
         <section className={panelCls}>
           <span className={panelHead}>Registration health</span>
-          <HealthRow label="Approved" value={luma.approved} color={green} />
-          <HealthRow label="Pending" value={luma.pending} color={gold} />
-          <HealthRow label="Waitlisted" value={luma.waitlist} color={rust} />
-          <HealthRow label="Declined" value={luma.declined} color="#8C857C" />
+          <HealthRow label="Approved" value={approved} color={green} />
+          <HealthRow label="Pending" value={Math.max(0, safeNumber(luma.pending))} color={gold} />
+          <HealthRow label="Waitlisted" value={Math.max(0, safeNumber(luma.waitlist))} color={rust} />
+          <HealthRow label="Declined" value={Math.max(0, safeNumber(luma.declined))} color="#8C857C" />
           <div className="mt-4 rounded-lg bg-cream px-3.5 py-3 text-[11.5px] leading-relaxed text-stone">Backstage stores aggregates, not guest names. A future identity match could link a Luma registration to an existing customer profile without creating a second customer record.</div>
         </section>
       </div>
@@ -466,3 +480,4 @@ function formatShortDate(iso: string) { return iso ? new Date(`${iso}T12:00:00`)
 function formatLongDate(iso: string) { return iso ? new Date(`${iso}T12:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : "TBC"; }
 function relativeTime(iso: string) { if (!iso) return "never"; const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000)); return mins < 1 ? "just now" : `${mins} min ago`; }
 function money(value: number) { return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(value); }
+function safeNumber(value: unknown) { const parsed = typeof value === "number" ? value : Number(value); return Number.isFinite(parsed) ? parsed : 0; }

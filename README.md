@@ -494,6 +494,77 @@ Outstanding / Restock / Publishers, with live badge counts
 - **Venue tinting**: the whole surface re-tints to the venue being viewed
   (teal for Simply Books, terracotta otherwise), matching the design file.
 
+## Returns module (Jul 2026, `returns-module` branch)
+
+Built from `returns-module-spec.md` + the Claude Design file
+**"Returns.dc.html"** (same design project). Replaces the old Returns
+Airtable process with one shared queue: **request → approval (RA) →
+shipping & credit**. Sits in the sidebar as its own group — *Returns* →
+**To be returned** (staging) / **Pick lists** / **Outstanding** — with live
+badge counts, under the existing `hub:view` permission (same friction-free
+staff group as the Hub; say the word if Returns needs its own grant).
+
+- **New return** (`/returns/new`) is scanner-first: barcode/ISBN → the
+  Orders lookup fills title, cover and publisher (imprints resolve to the
+  parent via the Hub's Publishers data), re-scans bump quantity instead of
+  duplicating, and lines group live by publisher — creation splits them
+  into **one request per publisher**, always itemised. Reason ("slow-moving",
+  "damaged"…) and condition are optional per line.
+- **Staging — "To be returned"** (spec's open question: yes, it gets its
+  own page, mirroring the Hub's To Order mental model). Grouped
+  **publisher × shop** (never combined across shops) with the shop's own
+  account number, a "can share one RA" nudge when several requests target
+  the same rep, the mandatory **route** choice (Direct to publisher / Via
+  Gardners — with rep-vs-portal hints), logged discard, and submit
+  (single or all).
+- **Lifecycle** uses the Orders V2 **clickable timeline** (forward one
+  validated step, back any distance with confirm + cleared later dates).
+  Every transition writes the audit trail (who/when). Approving captures
+  the **RA number** (labelled "Gardners authorisation ref" on that route)
+  plus an optional approval-form attachment.
+- **Pick lists**: approved returns as progress cards; scanning lives on
+  the detail page's **Pick & box** panel — each scan confirms a copy
+  (strike-through + tick, optimistic UI), and *Confirm shipped* is locked
+  until every copy is boxed.
+- **Barcode scanning** works two ways: USB/Bluetooth scanners as keyboard
+  input in any scan field (as in Orders), and **in-app camera scanning**
+  via the browser-native `BarcodeDetector` API (Chrome/Edge/Android
+  tablets, zero dependencies, continuous multi-scan). Where the API is
+  missing (iOS Safari) the overlay explains and points at the hardware
+  scanner path; a WASM decoder (zxing-wasm) can close that gap later if
+  anyone actually scans from an iPhone.
+- **Outstanding** (`/returns`) is the "what are we waiting on" view:
+  search, chip filters (status/origin/route), sortable columns, CSV
+  export, est. credit total (RRP less the publisher's restock discount —
+  Hub rates reused), and **overdue flags**: awaiting an RA >
+  `AWAITING_OVERDUE_DAYS` (10) or shipped with no credit >
+  `SHIPPED_OVERDUE_DAYS` (21) shows a red chase banner naming the rep.
+  Both thresholds TBC with Ben.
+- **Event-originated returns** carry origin metadata (event name, verified
+  by) end-to-end and show a distinct Event pill; Phase 6 reconciliation
+  should POST `/api/returns` `action:create` with `origin:"event"` — the
+  seam is ready, wiring it up is a Phase 6 task.
+- **Data seams**: `lib/data/returns-*` (interface / mock / airtable),
+  switched by `DATA_SOURCE`. Mock is self-contained with seed data across
+  every stage. ⚠️ The Airtable implementation needs two new app-owned
+  tables in the **Backstage** base (Ben — same one-off as Hub Lines):
+  **"Return Requests"** (Code, Location, Origin [General Stock/Event],
+  Event Ref, Event ID, Verified By, Publisher ID, Route [Direct to
+  Publisher/Via Gardners], Status [Requested/Awaiting Approval/Approved/
+  Shipped/Credit Confirmed], RA Number, RA Filename, RA Attachment
+  [attachment], Requested By, Date Requested/Submitted/Approved/Shipped/
+  Credit Confirmed [dates], Credit Amount [currency], Notes, Log) and
+  **"Return Lines"** (Request ID, Title, ISBN, Quantity, Reason,
+  Condition, RRP, Picked). Note: the RA form's **binary upload** into the
+  attachment field isn't wired yet (Airtable needs a public URL or the
+  content-upload endpoint) — the filename is recorded and the field is
+  ready; flagged rather than silently faked.
+- **Publishers table**: no new fields strictly needed — rep name/email are
+  reused as the chase contact. If a publisher's **returns contact** ever
+  differs from the ordering rep (spec's open question), add optional
+  "Returns Contact"/"Returns Email" columns and they can slot into the
+  overdue banner; not added speculatively.
+
 ## Open questions for Ben
 
 1. **One visual language or two?** The app is Prologue-branded overall with

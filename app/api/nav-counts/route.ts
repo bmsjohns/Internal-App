@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { can, getSessionUser } from "@/lib/auth";
 import { getClubsDataSource } from "@/lib/data/clubs";
 import { getHubDataSource } from "@/lib/data/hub";
+import { getReturnsDataSource } from "@/lib/data/returns";
 import { isStaleDraft } from "@/lib/hub";
 
 // Lightweight badge counts for the sidebar's Book clubs / Ordering groups.
@@ -17,11 +18,17 @@ export async function GET() {
       out.failedPayments = memberships.filter((s) => s.status !== "cancelled" && s.payStatus !== "ok").length;
     }
     if (can(user, "hub:view")) {
-      const lines = await getHubDataSource().listLines();
+      const [lines, returns] = await Promise.all([
+        getHubDataSource().listLines(),
+        getReturnsDataSource().listReturns(),
+      ]);
       out.drafts = lines.filter((l) => l.state === "draft").length;
       out.staleDrafts = lines.filter((l) => isStaleDraft(l)).length;
       out.pending = lines.filter((l) => l.state === "pending").length;
       out.outstanding = lines.filter((l) => l.state === "ordered").length;
+      out.returnsStaging = returns.filter((r) => r.status === "requested").length;
+      out.returnsOutstanding = returns.filter((r) => r.status !== "requested" && r.status !== "credit").length;
+      out.returnsPick = returns.filter((r) => r.status === "approved").length;
     }
   } catch (e) {
     // Badge counts are decoration — never break the nav over them.

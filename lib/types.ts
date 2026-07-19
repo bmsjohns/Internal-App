@@ -445,6 +445,79 @@ export interface RestockItem {
 
 export type RestockItemInput = Omit<RestockItem, "id" | "createdAt" | "handledAt" | "handledBy">;
 
+// ---------------------------------------------------------------------------
+// Returns module (returns-module spec, Jul 2026)
+//
+// Replaces the old Returns Airtable process. One shared queue fed by two
+// sources (general stock + Phase 6 post-event reconciliation); requests are
+// always itemised; nothing ships without an RA. Publisher reference data is
+// the Ordering Hub's — reused, not duplicated.
+// ---------------------------------------------------------------------------
+
+export type ReturnOrigin = "general" | "event";
+/** "" = not chosen yet — choosing one is required before submission. */
+export type ReturnRoute = "" | "direct" | "gardners";
+export type ReturnStatus = "requested" | "awaiting" | "approved" | "shipped" | "credit";
+
+export interface ReturnLine {
+  id: string;
+  title: string;
+  isbn: string;
+  quantity: number;
+  /** Optional: slow-moving / damaged / overstock / event-unsold. */
+  reason: string;
+  /** Optional: new / shelf-worn / damaged — useful on RA forms. */
+  condition: string;
+  rrp: number | null;
+  /** Pick-list progress: copies scanned off the shelf, 0..quantity. */
+  picked: number;
+}
+
+export type ReturnLineInput = Omit<ReturnLine, "id" | "picked">;
+
+export interface ReturnRequest {
+  id: string;
+  /** Human-facing code, e.g. "RTN-0142". */
+  code: string;
+  location: Location;
+  origin: ReturnOrigin;
+  /** Event name for at-a-glance context (origin === "event"). */
+  eventRef: string;
+  /** Link back to the originating Event record, when event-originated. */
+  eventId: string | null;
+  /** Ben / Events Lead who verified the post-event count (event origin). */
+  verifiedBy: string;
+  /** Hub Publishers reference — imprints resolve to the parent publisher. */
+  publisherId: string | null;
+  route: ReturnRoute;
+  status: ReturnStatus;
+  raNumber: string;
+  /** Uploaded approval form (PDF/screenshot); "" when none attached. */
+  raFilename: string;
+  requestedBy: string;
+  dateRequested: string; // YYYY-MM-DD
+  dateSubmitted: string | null;
+  dateApproved: string | null;
+  dateShipped: string | null;
+  dateCreditConfirmed: string | null;
+  /** Publisher's confirmed credit — optional, recorded off the credit note. */
+  creditAmount: number | null;
+  notes: string;
+  lines: ReturnLine[];
+  log: AuditEntry[];
+}
+
+export interface ReturnRequestInput {
+  location: Location;
+  origin: ReturnOrigin;
+  eventRef: string;
+  eventId: string | null;
+  verifiedBy: string;
+  publisherId: string | null;
+  notes: string;
+  lines: ReturnLineInput[];
+}
+
 export type Role = "staff" | "manager";
 
 export interface SessionUser {

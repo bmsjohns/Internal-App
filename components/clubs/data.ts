@@ -10,10 +10,12 @@ import type {
   HubPublisher,
   Member,
   RestockItem,
+  ReturnRequest,
   Supplier,
 } from "@/lib/types";
 
-// Client data hooks for the Book Clubs + Ordering Hub screens. Each module
+// Client data hooks for the Book Clubs + Ordering Hub + Returns screens.
+// Each module
 // is one payload (the datasets are small — see the API routes); a short
 // module-level cache stops list→detail navigation refetching every time,
 // and mutations call refresh() to invalidate.
@@ -77,8 +79,15 @@ function makeHook<T>(url: string) {
   };
 }
 
+export interface ReturnsPayload {
+  returns: ReturnRequest[];
+  publishers: HubPublisher[];
+  userName: string;
+}
+
 export const useClubsData = makeHook<ClubsPayload>("/api/clubs");
 export const useHubData = makeHook<HubPayload>("/api/hub");
+export const useReturnsData = makeHook<ReturnsPayload>("/api/returns");
 
 /** POST helper: JSON in/out, throws the API's error message. */
 export async function post(url: string, body: unknown): Promise<any> {

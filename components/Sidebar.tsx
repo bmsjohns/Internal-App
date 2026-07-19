@@ -47,7 +47,14 @@ interface NavChild {
   href: string;
   label: string;
   icon: string;
-  badge?: "failedPayments" | "drafts" | "pending" | "outstanding";
+  badge?:
+    | "failedPayments"
+    | "drafts"
+    | "pending"
+    | "outstanding"
+    | "returnsOutstanding"
+    | "returnsStaging"
+    | "returnsPick";
   warn?: boolean;
 }
 interface NavGroup {
@@ -81,6 +88,17 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/ordering/outstanding", label: "Outstanding", icon: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>', badge: "outstanding" },
       { href: "/ordering/restock", label: "Restock", icon: '<path d="M4 7l8-4 8 4-8 4z"/><path d="M4 7v10l8 4 8-4V7"/>' },
       { href: "/ordering/publishers", label: "Publishers", icon: '<path d="M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M8 3v18"/>' },
+    ],
+  },
+  {
+    key: "returns",
+    label: "Returns",
+    icon: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5 5 5 0 0 1-5 5H8"/>',
+    permission: "hub:view",
+    children: [
+      { href: "/returns/staging", label: "To be returned", icon: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5 5 5 0 0 1-5 5H8"/>', badge: "returnsStaging" },
+      { href: "/returns/picklists", label: "Pick lists", icon: '<rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3h6v2"/><path d="M9 13l2 2 4-4"/>', badge: "returnsPick" },
+      { href: "/returns", label: "Outstanding", icon: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>', badge: "returnsOutstanding" },
     ],
   },
 ];
@@ -181,21 +199,29 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
       <div className="fixed inset-x-0 top-0 z-20 flex items-center gap-3 border-b border-cream-2 bg-white px-4 py-2.5 lg:hidden">
         <Image src="/assets/p-mark-red.png" alt="" width={22} height={29} />
         <nav className="flex gap-1 overflow-x-auto">
-          {[
-            ...modules,
-            // Mobile keeps a flat bar: each group's screens join it directly.
-            ...NAV_GROUPS.filter((g) => user?.permissions.includes(g.permission)).flatMap((g) => g.children),
-          ].map((m) => (
-            <Link
-              key={m.href}
-              href={m.href}
-              className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13px] font-semibold ${
-                pathname.startsWith(m.href) ? "bg-shell text-rust" : "text-charcoal"
-              }`}
-            >
-              {m.label}
-            </Link>
-          ))}
+          {(() => {
+            const flat = [
+              ...modules,
+              // Mobile keeps a flat bar: each group's screens join it directly.
+              ...NAV_GROUPS.filter((g) => user?.permissions.includes(g.permission)).flatMap((g) => g.children),
+            ];
+            // Longest matching href wins, so "/returns" doesn't light up
+            // alongside its own sub-screens ("/returns/staging" etc.).
+            const best = flat
+              .filter((m) => pathname.startsWith(m.href))
+              .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+            return flat.map((m) => (
+              <Link
+                key={m.href}
+                href={m.href}
+                className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13px] font-semibold ${
+                  m.href === best ? "bg-shell text-rust" : "text-charcoal"
+                }`}
+              >
+                {m.label}
+              </Link>
+            ));
+          })()}
         </nav>
         <select
           value={venue}
@@ -295,7 +321,11 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
                 {open && (
                   <div className="mb-1 ml-[22px] flex flex-col gap-0.5 border-l border-cream-2 pl-2 pt-0.5">
                     {g.children.map((c) => {
-                      const active = pathname.startsWith(c.href);
+                      // Longest match wins (see mobile bar note).
+                      const best = g.children
+                        .filter((o) => pathname.startsWith(o.href))
+                        .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+                      const active = c.href === best;
                       const badge = c.badge ? (navCounts[c.badge] ?? 0) : 0;
                       return (
                         <Link

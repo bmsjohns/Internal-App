@@ -11,7 +11,7 @@ export async function GET() {
   }
   const events = await getEventsDataSource().listEvents();
   events.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || a.time.localeCompare(b.time));
-  return NextResponse.json({ events });
+  return NextResponse.json({ events, canEdit: can(user, "events:edit") });
 }
 
 export async function POST(req: NextRequest) {

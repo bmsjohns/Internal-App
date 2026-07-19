@@ -96,6 +96,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               rawStatus={order.status}
               lastModified={order.lastModified}
               log={order.statusLog}
+              supplier={order.publisher}
             />
           </div>
         </div>

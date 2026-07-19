@@ -17,12 +17,16 @@ const igHandle = (url: string) => {
 export default function HostsPage() {
   const router = useRouter();
   const [hosts, setHosts] = useState<Host[] | null>(null);
+  const [canEdit, setCanEdit] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     fetch("/api/hosts")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status === 403 ? "The Events module needs access — ask Ben." : `HTTP ${r.status}`))))
-      .then((d) => setHosts(d.hosts))
+      .then((d) => {
+        setHosts(d.hosts);
+        setCanEdit(!!d.canEdit);
+      })
       .catch((e) => setError(e.message));
   }, []);
 
@@ -33,11 +37,11 @@ export default function HostsPage() {
       <PageHeader
         eyebrow="Events · Phase 2"
         title="Hosts"
-        actions={
+        actions={canEdit ? (
           <Link href="/hosts/new" className={btnPrimary}>
             + New host
           </Link>
-        }
+        ) : undefined}
       >
         <p className="mb-0 mt-1.5 max-w-[560px] text-[13.5px] text-charcoal">
           Chairs and interviewers we work with — fees, contacts and who looks after them.
@@ -63,9 +67,9 @@ export default function HostsPage() {
               </thead>
               <tbody>
                 {hosts.map((h) => (
-                  <tr key={h.id} onClick={() => open(h.id)} className="cursor-pointer border-b border-cream-2 transition-colors hover:bg-shell/60">
+                  <tr key={h.id} className="border-b border-cream-2 transition-colors hover:bg-shell/60">
                     <td className="py-3.5 pl-8 pr-4">
-                      <div className="flex items-center gap-2.5">
+                      <Link href={`/hosts/${h.id}`} className="flex items-center gap-2.5 rounded-sm no-underline focus-visible:outline-2 focus-visible:outline-rust">
                         <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-shell font-display text-[13px] text-rust">
                           {initialsOf(h.name)}
                         </span>
@@ -73,7 +77,7 @@ export default function HostsPage() {
                           <div className="text-[14.5px] font-semibold">{h.name}</div>
                           {igHandle(h.instagram) && <div className="text-xs text-stone">{igHandle(h.instagram)}</div>}
                         </div>
-                      </div>
+                      </Link>
                     </td>
                     <td className="px-4 py-3.5 text-[13px] text-charcoal">
                       <div>{h.phone || "—"}</div>

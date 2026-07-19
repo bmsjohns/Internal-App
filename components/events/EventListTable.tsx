@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { ShowEvent } from "@/lib/types";
 import { fmtEventDate, fmtEventTime } from "@/lib/events";
 import { EventStatusChip, StaffingBadge } from "./chips";
@@ -32,17 +33,14 @@ export default function EventListTable({ events }: { events: ShowEvent[] }) {
         </thead>
         <tbody>
           {events.map((e) => (
-            <tr
-              key={e.id}
-              onClick={() => open(e.id)}
-              className="cursor-pointer border-b border-cream-2 transition-colors hover:bg-shell/60"
-            >
+            <tr key={e.id} className="border-b border-cream-2 transition-colors hover:bg-shell/60">
               <td className="py-[15px] pl-8 pr-4">
-                <div className="font-display text-base leading-tight">{e.name}</div>
-                <div className="mt-0.5 text-[12.5px] text-stone">
-                  {e.leadTitle || "—"}
-                  {e.types.length > 0 && <> · {e.types.join(" · ")}</>}
-                </div>
+                <Link href={`/events/${e.id}`} className="block rounded-sm no-underline focus-visible:outline-2 focus-visible:outline-rust">
+                  <div className="font-display text-base leading-tight">{e.name}</div>
+                  <div className="mt-0.5 text-[12.5px] text-stone">
+                    {e.leadTitle || "—"}{e.types.length > 0 && <> · {e.types.join(" · ")}</>}
+                  </div>
+                </Link>
               </td>
               <td className="whitespace-nowrap px-4 py-[15px]">
                 <div className="font-semibold">{fmtEventDate(e.date)}</div>

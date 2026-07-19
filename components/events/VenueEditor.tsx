@@ -13,7 +13,7 @@ const emptyVenue = (): Venue => ({
 });
 
 /** Venue detail/edit + new (§5.3) — plain CRUD with an explicit save. */
-export default function VenueEditor({ initial }: { initial?: Venue }) {
+export default function VenueEditor({ initial, canEdit = true }: { initial?: Venue; canEdit?: boolean }) {
   const router = useRouter();
   const isNew = !initial;
   const [draft, setDraft] = useState<Venue>(initial ?? emptyVenue());
@@ -24,6 +24,7 @@ export default function VenueEditor({ initial }: { initial?: Venue }) {
   const set = <K extends keyof VenueInput>(key: K, value: VenueInput[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
   async function save() {
+    if (!canEdit) return;
     if (!draft.name.trim()) {
       setError("Venue name is required");
       return;
@@ -53,6 +54,7 @@ export default function VenueEditor({ initial }: { initial?: Venue }) {
   }
 
   async function remove() {
+    if (!canEdit) return;
     if (isNew || !confirm(`Delete “${draft.name}”? This cannot be undone.`)) return;
     setBusy(true);
     setError("");
@@ -77,17 +79,18 @@ export default function VenueEditor({ initial }: { initial?: Venue }) {
           <div className="eyebrow mb-1 text-rust">{isNew ? "New venue" : "Venue"}</div>
           <h1 className="m-0 truncate text-[24px] leading-none sm:text-[26px]">{draft.name || "Untitled venue"}</h1>
         </div>
-        <div className="flex gap-2">
+        {canEdit && <div className="flex gap-2">
           {!isNew && <button onClick={remove} disabled={busy || draft.eventIds.length > 0} className={btnDanger}>Delete</button>}
           <button onClick={save} disabled={busy} className={btnPrimary}>
             {busy ? "Saving…" : "Save venue"}
           </button>
-        </div>
+        </div>}
       </header>
 
       <div className="grid w-full max-w-[1040px] items-start gap-6 px-4 pb-12 pt-6 sm:px-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(260px,1fr)]">
         <div className="flex flex-col gap-5">
           {error && <p className="m-0 rounded-lg border border-blush bg-shell px-4 py-3 text-[13px] font-semibold text-rust">{error}</p>}
+          {!canEdit && <p className="m-0 rounded-lg border border-cream-2 bg-white px-4 py-3 text-[13px] text-charcoal">Read-only access</p>}
           {draft.photo[0] && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={draft.photo[0].url} alt={draft.name} className="max-h-[240px] w-full rounded-lg border border-cream-2 object-cover" />
@@ -97,11 +100,11 @@ export default function VenueEditor({ initial }: { initial?: Venue }) {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className={labelCls} htmlFor="v-name">Name</label>
-                <input id="v-name" value={draft.name} onChange={(e) => set("name", e.target.value)} className={inputCls} />
+                <input id="v-name" value={draft.name} onChange={(e) => set("name", e.target.value)} className={inputCls} disabled={!canEdit} />
               </div>
               <div>
                 <label className={labelCls} htmlFor="v-cap">Capacity</label>
-                <input id="v-cap" value={draft.capacity} onChange={(e) => set("capacity", e.target.value)} className={inputCls} placeholder="e.g. 150" />
+                <input id="v-cap" value={draft.capacity} onChange={(e) => set("capacity", e.target.value)} className={inputCls} placeholder="e.g. 150" disabled={!canEdit} />
               </div>
               <div>
                 <span className={labelCls}>Location</span>
@@ -111,6 +114,7 @@ export default function VenueEditor({ initial }: { initial?: Venue }) {
                     return (
                       <button
                         key={l}
+                        disabled={!canEdit}
                         onClick={() => set("locations", on ? draft.locations.filter((x) => x !== l) : [...draft.locations, l])}
                         className={`cursor-pointer rounded-full border px-3 py-1.5 text-[12.5px] ${on ? "border-rust bg-shell font-semibold text-rust" : "border-cream-2 bg-white text-charcoal"}`}
                       >
@@ -122,7 +126,7 @@ export default function VenueEditor({ initial }: { initial?: Venue }) {
               </div>
               <div className="sm:col-span-2">
                 <label className={labelCls} htmlFor="v-notes">Notes</label>
-                <textarea id="v-notes" value={draft.notes} onChange={(e) => set("notes", e.target.value)} className={textareaCls} placeholder="Load-in, AV, quirks of the room…" />
+                <textarea id="v-notes" value={draft.notes} onChange={(e) => set("notes", e.target.value)} className={textareaCls} placeholder="Load-in, AV, quirks of the room…" disabled={!canEdit} />
               </div>
             </div>
           </section>
@@ -132,7 +136,7 @@ export default function VenueEditor({ initial }: { initial?: Venue }) {
           <div className={panelCls}>
             <span className={panelHead}>Status</span>
             <div className={selectWrap}>
-              <select value={draft.status} onChange={(e) => set("status", e.target.value)} className={selectCls} aria-label="Status">
+              <select value={draft.status} onChange={(e) => set("status", e.target.value)} className={selectCls} aria-label="Status" disabled={!canEdit}>
                 <option value="">—</option>
                 {VENUE_STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>{s}</option>
@@ -148,7 +152,7 @@ export default function VenueEditor({ initial }: { initial?: Venue }) {
           </div>
           <div className={panelCls}>
             <span className={panelHead}>Tags</span>
-            <input value={tagText} onChange={(e) => setTagText(e.target.value)} className={inputCls} placeholder="Ticketed, Bar, Schools…" />
+            <input value={tagText} onChange={(e) => setTagText(e.target.value)} className={inputCls} placeholder="Ticketed, Bar, Schools…" disabled={!canEdit} />
             <p className="mb-0 mt-1.5 text-[11.5px] text-stone">Comma-separated.</p>
             {draft.techSpec.length > 0 && (
               <>

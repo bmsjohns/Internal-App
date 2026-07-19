@@ -217,7 +217,7 @@ export default function EventEditor({
           </div>
           <div className="flex items-center gap-2">
             {isNew ? (
-              <button onClick={create} disabled={creating} className={btnPrimary}>
+              <button onClick={create} disabled={creating || !meta.canEdit} className={btnPrimary}>
                 {creating ? "Creating…" : "Create event"}
               </button>
             ) : (
@@ -261,6 +261,11 @@ export default function EventEditor({
       </div>
 
       <div className="w-full max-w-[1180px] px-4 pb-14 pt-6 sm:px-8">
+        {!meta.canEdit && (
+          <div className="mb-4 rounded-lg border border-cream-2 bg-white px-4 py-3 text-[13px] text-charcoal">
+            Read-only access — ask an Events editor if this record needs changing.
+          </div>
+        )}
         {error && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-blush bg-shell px-4 py-3 text-[13px] font-semibold text-rust">
             <span>{error}</span>

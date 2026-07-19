@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Supplier } from "@/lib/types";
 import { btnGhost, btnPrimary } from "./PageHeader";
+import { fetchJson } from "@/lib/fetch-json";
 
 const inputCls = "w-full rounded-md border border-cream-2 bg-white px-3 py-2 text-sm text-ink";
 
@@ -15,17 +16,17 @@ export default function SuppliersPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const load = () =>
-    fetch("/api/suppliers")
-      .then((r) => r.json())
+  const load = useCallback(() =>
+    fetchJson<{ suppliers: Supplier[] }>("/api/suppliers")
       .then((d) => {
-        setSuppliers(d.suppliers ?? []);
-        setDrafts(Object.fromEntries((d.suppliers ?? []).map((s: Supplier) => [s.id, { ...s }])));
-      });
+        setSuppliers(d.suppliers);
+        setDrafts(Object.fromEntries(d.suppliers.map((s: Supplier) => [s.id, { ...s }])));
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Couldn’t load suppliers")), []);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   async function saveRow(id: string) {
     const d = drafts[id];
@@ -44,8 +45,13 @@ export default function SuppliersPanel() {
   async function removeRow(id: string, name: string) {
     if (!confirm(`Remove supplier “${name}”? Orders already assigned to it keep the name.`)) return;
     setBusy(true);
-    await fetch(`/api/suppliers/${id}`, { method: "DELETE" });
-    await load();
+    setError("");
+    try {
+      await fetchJson(`/api/suppliers/${id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Remove failed");
+    }
     setBusy(false);
   }
 

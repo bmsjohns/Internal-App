@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Customer } from "@/lib/types";
 import { Avatar } from "./chips";
+import { fetchJson } from "@/lib/fetch-json";
 
 export type PickedCustomer = { id: string; name: string; phone: string } | null;
 
@@ -25,6 +26,7 @@ export default function CustomerPicker({
   const [draft, setDraft] = useState({ name: "", phone: "", email: "" });
   const [dup, setDup] = useState<Customer | null>(null);
   const [error, setError] = useState("");
+  const [searchError, setSearchError] = useState("");
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,9 +35,10 @@ export default function CustomerPicker({
       return;
     }
     const t = setTimeout(() => {
-      fetch(`/api/customers?q=${encodeURIComponent(q)}`)
-        .then((r) => r.json())
-        .then((d) => setResults(d.customers ?? []));
+      setSearchError("");
+      fetchJson<{ customers: Customer[] }>(`/api/customers?q=${encodeURIComponent(q)}`)
+        .then((d) => setResults(d.customers))
+        .catch((e) => setSearchError(e instanceof Error ? e.message : "Search failed"));
     }, 200);
     return () => clearTimeout(t);
   }, [q]);
@@ -108,6 +111,7 @@ export default function CustomerPicker({
           </div>
           {open && q.trim() && (
             <div className="absolute z-10 -mt-px w-full overflow-hidden rounded-b-md border border-cream-2 bg-white shadow-lg">
+              {searchError && <div className="px-3.5 py-3 text-sm font-semibold text-coral">Customer search failed: {searchError}</div>}
               {results.map((c) => (
                 <button
                   key={c.id}

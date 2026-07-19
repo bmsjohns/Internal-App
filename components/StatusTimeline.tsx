@@ -29,11 +29,13 @@ export default function StatusTimeline({
   rawStatus,
   lastModified,
   log,
+  supplier,
 }: {
   orderId: string;
   rawStatus: string;
   lastModified: string;
   log: StatusLogEntry[];
+  supplier: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -62,12 +64,13 @@ export default function StatusTimeline({
 
   const pill = (key: string, active: boolean, done: boolean) => {
     const s = CANONICAL_STATUSES.find((x) => x.key === key)!;
+    const supplierRequired = key === "ordered" && !supplier.trim();
     return (
       <button
         key={key}
         onClick={() => setStatus(key)}
-        disabled={busy}
-        title={active ? "Current status" : `Move to ${s.label}`}
+        disabled={busy || supplierRequired}
+        title={supplierRequired ? "Assign a supplier before marking this order as ordered" : active ? "Current status" : `Move to ${s.label}`}
         className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
           active ? "" : "hover:border-ink"
         }`}

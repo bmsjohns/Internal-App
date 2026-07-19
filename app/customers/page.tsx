@@ -1,21 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { Customer } from "@/lib/types";
 import PageHeader from "@/components/PageHeader";
 import { Avatar } from "@/components/chips";
+import { fetchJson } from "@/lib/fetch-json";
 
 export default function CustomersPage() {
-  const router = useRouter();
   const [customers, setCustomers] = useState<Customer[] | null>(null);
+  const [error, setError] = useState("");
   const [q, setQ] = useState("");
 
-  useEffect(() => {
-    fetch("/api/customers")
-      .then((r) => r.json())
-      .then((d) => setCustomers(d.customers ?? []));
+  const load = useCallback(() => {
+    setError("");
+    setCustomers(null);
+    fetchJson<{ customers: Customer[] }>("/api/customers")
+      .then((d) => setCustomers(d.customers))
+      .catch((e) => setError(e instanceof Error ? e.message : "Couldn’t load customers"));
   }, []);
+
+  useEffect(() => load(), [load]);
 
   const filtered = useMemo(() => {
     if (!customers) return [];
@@ -49,7 +54,9 @@ export default function CustomersPage() {
         </div>
       </div>
       <div className="flex-1 overflow-auto">
-        {!customers ? (
+        {error ? (
+          <div className="p-8 text-coral">Couldn’t load customers: {error} <button onClick={load} className="font-semibold underline">Retry</button></div>
+        ) : !customers ? (
           <p className="p-8 text-stone">Loading…</p>
         ) : (
           <table className="w-full border-collapse text-sm">
@@ -63,16 +70,12 @@ export default function CustomersPage() {
             </thead>
             <tbody>
               {filtered.map((c) => (
-                <tr
-                  key={c.id}
-                  onClick={() => router.push(`/customers/${c.id}`)}
-                  className="cursor-pointer border-b border-cream-2 bg-white hover:bg-shell/60"
-                >
+                <tr key={c.id} className="border-b border-cream-2 bg-white hover:bg-shell/60">
                   <td className="py-3.5 pl-5 pr-4 sm:pl-8">
-                    <div className="flex items-center gap-[11px]">
+                    <Link href={`/customers/${c.id}`} className="flex items-center gap-[11px] rounded-sm no-underline focus-visible:outline-2 focus-visible:outline-rust">
                       <Avatar name={c.name} />
                       <span className="font-semibold text-ink">{c.name}</span>
-                    </div>
+                    </Link>
                   </td>
                   <td className="px-4 py-3.5 font-mono text-charcoal">{c.phone || "—"}</td>
                   <td className="hidden px-4 py-3.5 text-charcoal sm:table-cell">{c.email || "—"}</td>

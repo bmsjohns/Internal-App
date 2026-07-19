@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDataSource } from "@/lib/data";
 import { canDeleteAt, getSessionUser } from "@/lib/auth";
+import { orderedSupplierError } from "@/lib/order-workflow";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -30,6 +31,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const existing = await ds.getOrder(id);
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  const workflowError = orderedSupplierError(existing, body);
+  if (workflowError) {
+    return NextResponse.json({ error: workflowError }, { status: 400 });
   }
   // V3 §5 audit trail: every status change records who and when.
   if (typeof body.status === "string" && body.status !== existing.status) {

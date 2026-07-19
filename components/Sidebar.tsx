@@ -94,6 +94,16 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
               {m.label}
             </Link>
           ))}
+          {user?.permissions.includes("settings:manage") && (
+            <Link
+              href="/settings"
+              className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13px] font-semibold ${
+                pathname.startsWith("/settings") ? "bg-shell text-rust" : "text-charcoal"
+              }`}
+            >
+              Settings
+            </Link>
+          )}
         </nav>
         <select
           value={venue}

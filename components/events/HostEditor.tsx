@@ -14,7 +14,7 @@ const emptyHost = (): Host => ({
 });
 
 /** Host detail/edit + new (§5.4). */
-export default function HostEditor({ initial }: { initial?: Host }) {
+export default function HostEditor({ initial, canEdit = true }: { initial?: Host; canEdit?: boolean }) {
   const router = useRouter();
   const isNew = !initial;
   const [draft, setDraft] = useState<Host>(initial ?? emptyHost());
@@ -34,6 +34,7 @@ export default function HostEditor({ initial }: { initial?: Host }) {
   const set = <K extends keyof Host>(key: K, value: Host[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
   async function save() {
+    if (!canEdit) return;
     if (!draft.name.trim()) {
       setError("Host name is required");
       return;
@@ -62,6 +63,7 @@ export default function HostEditor({ initial }: { initial?: Host }) {
   }
 
   async function remove() {
+    if (!canEdit) return;
     if (isNew || !confirm(`Delete “${draft.name}”? This cannot be undone.`)) return;
     setBusy(true);
     setError("");
@@ -86,31 +88,32 @@ export default function HostEditor({ initial }: { initial?: Host }) {
           <div className="eyebrow mb-1 text-rust">{isNew ? "New host" : "Host"}</div>
           <h1 className="m-0 truncate text-[24px] leading-none sm:text-[26px]">{draft.name || "Untitled host"}</h1>
         </div>
-        <div className="flex gap-2">
+        {canEdit && <div className="flex gap-2">
           {!isNew && <button onClick={remove} disabled={busy || draft.eventIds.length > 0} className={btnDanger}>Delete</button>}
           <button onClick={save} disabled={busy} className={btnPrimary}>
             {busy ? "Saving…" : "Save host"}
           </button>
-        </div>
+        </div>}
       </header>
 
       <div className="grid w-full max-w-[1040px] items-start gap-6 px-4 pb-12 pt-6 sm:px-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(260px,1fr)]">
         <div className="flex flex-col gap-5">
           {error && <p className="m-0 rounded-lg border border-blush bg-shell px-4 py-3 text-[13px] font-semibold text-rust">{error}</p>}
+          {!canEdit && <p className="m-0 rounded-lg border border-cream-2 bg-white px-4 py-3 text-[13px] text-charcoal">Read-only access</p>}
           <section className={panelCls}>
             <span className={panelHead}>Details</span>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className={labelCls} htmlFor="h-name">Name</label>
-                <input id="h-name" value={draft.name} onChange={(e) => set("name", e.target.value)} className={inputCls} />
+                <input id="h-name" value={draft.name} onChange={(e) => set("name", e.target.value)} className={inputCls} disabled={!canEdit} />
               </div>
               <div>
                 <label className={labelCls} htmlFor="h-phone">Phone</label>
-                <input id="h-phone" type="tel" value={draft.phone} onChange={(e) => set("phone", e.target.value)} className={inputCls} />
+                <input id="h-phone" type="tel" value={draft.phone} onChange={(e) => set("phone", e.target.value)} className={inputCls} disabled={!canEdit} />
               </div>
               <div>
                 <label className={labelCls} htmlFor="h-email">Email</label>
-                <input id="h-email" type="email" value={draft.email} onChange={(e) => set("email", e.target.value)} className={inputCls} />
+                <input id="h-email" type="email" value={draft.email} onChange={(e) => set("email", e.target.value)} className={inputCls} disabled={!canEdit} />
               </div>
               <div>
                 <label className={labelCls} htmlFor="h-fee">Standard fee (£)</label>
@@ -124,15 +127,16 @@ export default function HostEditor({ initial }: { initial?: Host }) {
                   }}
                   className={inputCls}
                   placeholder="0 = no fee"
+                  disabled={!canEdit}
                 />
               </div>
               <div>
                 <label className={labelCls} htmlFor="h-ig">Instagram</label>
-                <input id="h-ig" value={draft.instagram} onChange={(e) => set("instagram", e.target.value)} className={inputCls} placeholder="instagram.com/…" />
+                <input id="h-ig" value={draft.instagram} onChange={(e) => set("instagram", e.target.value)} className={inputCls} placeholder="instagram.com/…" disabled={!canEdit} />
               </div>
               <div className="sm:col-span-2">
                 <label className={labelCls} htmlFor="h-notes">Notes</label>
-                <textarea id="h-notes" value={draft.notes} onChange={(e) => set("notes", e.target.value)} className={textareaCls} placeholder="What they’re great at, briefing preferences…" />
+                <textarea id="h-notes" value={draft.notes} onChange={(e) => set("notes", e.target.value)} className={textareaCls} placeholder="What they’re great at, briefing preferences…" disabled={!canEdit} />
               </div>
             </div>
           </section>

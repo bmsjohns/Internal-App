@@ -94,7 +94,7 @@ const NAV_GROUPS: NavGroup[] = [
     key: "returns",
     label: "Returns",
     icon: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5 5 5 0 0 1-5 5H8"/>',
-    permission: "hub:view",
+    permission: "returns:view",
     children: [
       { href: "/returns/staging", label: "To be returned", icon: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5 5 5 0 0 1-5 5H8"/>', badge: "returnsStaging" },
       { href: "/returns/picklists", label: "Pick lists", icon: '<rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3h6v2"/><path d="M9 13l2 2 4-4"/>', badge: "returnsPick" },

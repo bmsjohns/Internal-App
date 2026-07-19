@@ -501,8 +501,12 @@ Built from `returns-module-spec.md` + the Claude Design file
 Airtable process with one shared queue: **request → approval (RA) →
 shipping & credit**. Sits in the sidebar as its own group — *Returns* →
 **To be returned** (staging) / **Pick lists** / **Outstanding** — with live
-badge counts, under the existing `hub:view` permission (same friction-free
-staff group as the Hub; say the word if Returns needs its own grant).
+badge counts, under its own **`returns:view`** permission (Ben, 19 Jul):
+default-on for both roles like `hub:view`, but a separate string so access
+can be tailored per person. ⚠️ Clerk override semantics apply — any user
+with an explicit `permissions` array in publicMetadata (including Ben)
+needs `"returns:view"` added to it by hand, or the module disappears for
+them.
 
 - **New return** (`/returns/new`) is scanner-first: barcode/ISBN → the
   Orders lookup fills title, cover and publisher (imprints resolve to the
@@ -522,10 +526,12 @@ staff group as the Hub; say the word if Returns needs its own grant).
   Every transition writes the audit trail (who/when). Approving captures
   the **RA number** (labelled "Gardners authorisation ref" on that route)
   plus an optional approval-form attachment.
-- **Pick lists**: approved returns as progress cards; scanning lives on
-  the detail page's **Pick & box** panel — each scan confirms a copy
-  (strike-through + tick, optimistic UI), and *Confirm shipped* is locked
-  until every copy is boxed.
+- **Pick lists**: approved returns as progress cards; picking lives on
+  the detail page's **Pick & box** panel — a barcode scan or each line's
+  **Pick button** confirms copies (strike-through + tick, optimistic UI),
+  and a shared quantity stepper lets either path confirm several copies
+  at once (clamped at what's left; resets to 1 after each pick).
+  *Confirm shipped* is locked until every copy is boxed.
 - **Barcode scanning** works two ways: USB/Bluetooth scanners as keyboard
   input in any scan field (as in Orders), and **in-app camera scanning**
   via the browser-native `BarcodeDetector` API (Chrome/Edge/Android
@@ -546,8 +552,10 @@ staff group as the Hub; say the word if Returns needs its own grant).
   seam is ready, wiring it up is a Phase 6 task.
 - **Data seams**: `lib/data/returns-*` (interface / mock / airtable),
   switched by `DATA_SOURCE`. Mock is self-contained with seed data across
-  every stage. ⚠️ The Airtable implementation needs two new app-owned
-  tables in the **Backstage** base (Ben — same one-off as Hub Lines):
+  every stage. The two app-owned tables in the **Backstage** base were
+  **created 19 Jul 2026** (`Return Requests` tbldEU7dwAZ6olicK,
+  `Return Lines` tbletg9qngppb85Qq) — airtable mode is ready to point at
+  them. For reference, the schema:
   **"Return Requests"** (Code, Location, Origin [General Stock/Event],
   Event Ref, Event ID, Verified By, Publisher ID, Route [Direct to
   Publisher/Via Gardners], Status [Requested/Awaiting Approval/Approved/

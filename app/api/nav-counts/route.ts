@@ -18,14 +18,14 @@ export async function GET() {
       out.failedPayments = memberships.filter((s) => s.status !== "cancelled" && s.payStatus !== "ok").length;
     }
     if (can(user, "hub:view")) {
-      const [lines, returns] = await Promise.all([
-        getHubDataSource().listLines(),
-        getReturnsDataSource().listReturns(),
-      ]);
+      const lines = await getHubDataSource().listLines();
       out.drafts = lines.filter((l) => l.state === "draft").length;
       out.staleDrafts = lines.filter((l) => isStaleDraft(l)).length;
       out.pending = lines.filter((l) => l.state === "pending").length;
       out.outstanding = lines.filter((l) => l.state === "ordered").length;
+    }
+    if (can(user, "returns:view")) {
+      const returns = await getReturnsDataSource().listReturns();
       out.returnsStaging = returns.filter((r) => r.status === "requested").length;
       out.returnsOutstanding = returns.filter((r) => r.status !== "requested" && r.status !== "credit").length;
       out.returnsPick = returns.filter((r) => r.status === "approved").length;

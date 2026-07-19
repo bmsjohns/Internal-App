@@ -20,7 +20,7 @@ import {
 import { money } from "@/lib/clubs";
 import { post, useReturnsData } from "@/components/clubs/data";
 import { AccentButton, Overlay, OverlayHead, Toast, useAccent } from "@/components/clubs/ui";
-import { GhostButton, LineCover, OriginPill, ReturnStatusPill } from "@/components/returns/ui";
+import { GhostButton, LineCover, OriginPill, QtyStepper, ReturnStatusPill } from "@/components/returns/ui";
 import ReturnTimeline from "@/components/returns/ReturnTimeline";
 import CameraScanner from "@/components/returns/CameraScanner";
 
@@ -47,6 +47,7 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
   const [raFilename, setRaFilename] = useState("");
   const [creditAmount, setCreditAmount] = useState("");
   const [pickScan, setPickScan] = useState("");
+  const [pickQty, setPickQty] = useState(1);
   const [pickEdits, setPickEdits] = useState<Record<string, number>>({});
   const [camera, setCamera] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -85,7 +86,33 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
-  const doPick = async (scanned: string) => {
+  // One pick action for both inputs — a barcode scan or a line's Pick
+  // button — honouring the shared quantity (clamped at what's left).
+  const pickLine = async (lineId: string, title: string) => {
+    const line = r.lines.find((l) => l.id === lineId);
+    if (!line) return;
+    const n = Math.min(pickQty, line.quantity - line.picked);
+    if (n <= 0) {
+      showToast("All copies of that title already picked");
+      return;
+    }
+    setPickEdits((e) => ({ ...e, [lineId]: line.picked + n }));
+    setPickQty(1);
+    showToast(`Picked ${n > 1 ? `${n} × ` : ""}${title}`);
+    try {
+      await post("/api/returns", { action: "pick", id: r.id, lineId, count: n });
+      refresh();
+    } catch (e) {
+      setPickEdits((edits) => {
+        const rest = { ...edits };
+        delete rest[lineId];
+        return rest;
+      });
+      showToast(e instanceof Error ? e.message : "Pick failed");
+    }
+  };
+
+  const doPick = (scanned: string) => {
     const result = matchPickScan(r, scanned);
     setPickScan("");
     if (!result.ok) {
@@ -98,19 +125,7 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
       );
       return;
     }
-    setPickEdits((e) => ({ ...e, [result.lineId]: (r.lines.find((l) => l.id === result.lineId)?.picked ?? 0) + 1 }));
-    showToast(`Picked · ${result.title}`);
-    try {
-      await post("/api/returns", { action: "pick", id: r.id, lineId: result.lineId });
-      refresh();
-    } catch (e) {
-      setPickEdits((edits) => {
-        const rest = { ...edits };
-        delete rest[result.lineId];
-        return rest;
-      });
-      showToast(e instanceof Error ? e.message : "Pick failed");
-    }
+    void pickLine(result.lineId, result.title);
   };
 
   const openApprove = () => {
@@ -262,19 +277,23 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
                 Scan with camera
               </GhostButton>
             </div>
-            <div className="relative mt-3">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: accent }}>
-                <path d="M4 5v14M8 5v14M11 5v14M14 5v14M17 5v14M20 5v14" />
-              </svg>
-              <input
-                value={pickScan}
-                onChange={(e) => setPickScan(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), doPick(pickScan))}
-                placeholder="Scan a barcode to confirm it's picked"
-                className="w-full rounded-lg border-[1.5px] bg-white py-3 pl-10 pr-3 text-[15px] text-ink"
-                style={{ borderColor: accent }}
-                inputMode="numeric"
-              />
+            <div className="mt-3 flex flex-wrap items-center gap-2.5">
+              <div className="relative min-w-[220px] flex-1">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: accent }}>
+                  <path d="M4 5v14M8 5v14M11 5v14M14 5v14M17 5v14M20 5v14" />
+                </svg>
+                <input
+                  value={pickScan}
+                  onChange={(e) => setPickScan(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), doPick(pickScan))}
+                  placeholder="Scan a barcode to confirm it's picked"
+                  className="w-full rounded-lg border-[1.5px] bg-white py-3 pl-10 pr-3 text-[15px] text-ink"
+                  style={{ borderColor: accent }}
+                  inputMode="numeric"
+                />
+              </div>
+              <QtyStepper value={pickQty} onChange={setPickQty} />
+              <span className="text-xs text-stone">copies per scan / pick</span>
             </div>
           </div>
           {r.lines.map((l) => {
@@ -293,6 +312,14 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
                 <span className="whitespace-nowrap font-semibold tabular-nums text-charcoal">
                   {l.picked} / {l.quantity}
                 </span>
+                {!done && (
+                  <GhostButton onClick={() => pickLine(l.id, l.title)} title={`Mark ${Math.min(pickQty, l.quantity - l.picked)} picked without scanning`}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12l5 5L20 6" />
+                    </svg>
+                    Pick{pickQty > 1 ? ` ${Math.min(pickQty, l.quantity - l.picked)}` : ""}
+                  </GhostButton>
+                )}
                 <span
                   className="flex h-6 w-6 items-center justify-center rounded-full"
                   style={done ? { background: accent, color: "#fff" } : { background: "var(--color-cream-2)", color: "var(--color-stone)" }}

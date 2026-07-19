@@ -273,14 +273,14 @@ export const mockReturnsDataSource: ReturnsDataSource = {
     return r;
   },
 
-  async pick(id, lineId, byName) {
+  async pick(id, lineId, count, byName) {
     const r = get(id);
     if (r.status !== "approved") throw new Error("Picking opens once the return is approved");
     const line = r.lines.find((l) => l.id === lineId);
     if (!line) throw new Error("Line not found");
     if (line.picked >= line.quantity) throw new Error("All copies of that title already picked");
-    line.picked++;
-    void byName; // individual scans aren't audit entries — shipping is
+    line.picked = Math.min(line.quantity, line.picked + Math.max(1, Math.floor(count)));
+    void byName; // individual picks aren't audit entries — shipping is
     return r;
   },
 

@@ -27,8 +27,10 @@ export interface ReturnsDataSource {
   /** awaiting → approved, recording the RA number (+ optional form). */
   approve(id: string, raNumber: string, raFilename: string, byName: string): Promise<ReturnRequest>;
 
-  /** Pick-list scan: +1 picked on a line (clamped at quantity). */
-  pick(id: string, lineId: string, byName: string): Promise<ReturnRequest>;
+  /** Pick-list progress: +count picked on a line (clamped at quantity) —
+   *  one barcode scan, or the line's manual Pick button, either with a
+   *  multi-copy quantity. */
+  pick(id: string, lineId: string, count: number, byName: string): Promise<ReturnRequest>;
 
   /** approved → shipped. Rejected until every copy is picked. */
   confirmShipped(id: string, byName: string): Promise<ReturnRequest>;

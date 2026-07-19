@@ -12,8 +12,8 @@ const devBypass = () =>
 // publicMetadata override these, so e.g. settings:manage can later be given
 // to a non-manager (or taken from a venue manager) without code changes.
 const ROLE_PERMISSIONS: Record<Role, string[]> = {
-  staff: ["callsheet:view", "hub:view"],
-  manager: ["settings:manage", "callsheet:view", "hub:view", "hub:send"],
+  staff: ["callsheet:view", "hub:view", "returns:view"],
+  manager: ["settings:manage", "callsheet:view", "hub:view", "hub:send", "returns:view"],
 };
 
 // Events Phase 1: pitching is deliberately NOT granted by any role — access
@@ -53,6 +53,16 @@ export const CALLSHEET_PERMISSION = "callsheet:view";
 //    as Orders — until Ben decides, access is explicit-grant like pitching.
 export const HUB_PERMISSIONS = ["hub:view", "hub:send"];
 export const CLUBS_PERMISSIONS = ["clubs:view", "clubs:manage"];
+
+// Returns module (Ben, 19 Jul 2026: "Returns should get its own
+// permissions"): returns:view covers the whole module — staging, pick
+// lists, outstanding, all lifecycle actions. Default-on for both roles
+// (same friction-free ethos as hub:view) but its own string, so access can
+// be tailored per person via explicit `permissions` in Clerk metadata.
+// ⚠️ Remember the override semantics above: any user with an EXPLICIT
+// permissions array (including Ben) must have "returns:view" added to it
+// by hand — role defaults don't apply to them.
+export const RETURNS_PERMISSIONS = ["returns:view"];
 
 /**
  * Resolve the current user, from Clerk when configured.

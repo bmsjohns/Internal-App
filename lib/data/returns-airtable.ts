@@ -251,7 +251,7 @@ export const airtableReturnsDataSource: ReturnsDataSource = {
     );
   },
 
-  async pick(id, lineId, byName) {
+  async pick(id, lineId, count, byName) {
     const baseId = await base();
     const r = await getOne(baseId, id);
     if (r.status !== "approved") throw new Error("Picking opens once the return is approved");
@@ -259,11 +259,12 @@ export const airtableReturnsDataSource: ReturnsDataSource = {
     if (!line) throw new Error("Line not found");
     if (line.picked >= line.quantity) throw new Error("All copies of that title already picked");
     void byName;
+    const picked = Math.min(line.quantity, line.picked + Math.max(1, Math.floor(count)));
     await atBase(baseId, `${encodeURIComponent(LINES)}/${lineId}`, {
       method: "PATCH",
-      body: JSON.stringify({ fields: { Picked: line.picked + 1 } }),
+      body: JSON.stringify({ fields: { Picked: picked } }),
     });
-    line.picked++;
+    line.picked = picked;
     return r;
   },
 

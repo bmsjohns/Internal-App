@@ -27,6 +27,7 @@ export const PERMISSION_CATALOG = [
   { key: "clubs.stripe", module: "Book Clubs", label: "Stripe actions", description: "Pause, resume, move or cancel subscriptions.", sensitive: true },
   { key: "briefing.view", module: "Daily Briefing", label: "View briefing", description: "See the daily operational briefing." },
   { key: "briefing.alerts.manage", module: "Daily Briefing", label: "Manage alerts", description: "Post and clear operational alerts." },
+  { key: "dashboard.view", module: "Management Dashboard", label: "View dashboard", description: "See the leadership dashboard — sales, live operations and trends." },
   { key: "settings.suppliers.manage", module: "Settings", label: "Manage suppliers", description: "Edit suppliers, accounts and ordering cadence." },
   { key: "team.manage", module: "Administration", label: "Manage team", description: "Invite, edit and deactivate users.", sensitive: true },
   { key: "roles.manage", module: "Administration", label: "Manage roles", description: "Change the default permission bundles.", sensitive: true },

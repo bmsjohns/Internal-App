@@ -14,6 +14,7 @@ const ic = (p: string) => (
 
 const MODULES = [
   { href: "/briefing", label: "Daily Briefing", permission: "briefing.view", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h9M8 13h9M8 17h6"/>' },
+  { href: "/dashboard", label: "Dashboard", permission: "dashboard.view", icon: '<rect x="4" y="4" width="7" height="7" rx="1.4"/><rect x="13" y="4" width="7" height="7" rx="1.4"/><rect x="4" y="13" width="7" height="7" rx="1.4"/><rect x="13" y="13" width="7" height="7" rx="1.4"/>' },
   { href: "/orders", label: "Orders", permission: "orders.view", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>' },
   { href: "/customers", label: "Customers", permission: "customers.view", icon: '<circle cx="12" cy="8" r="4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>' },
   { href: "/to-order", label: "Customer ordering", permission: "orders.view", icon: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>' },

@@ -44,8 +44,8 @@ describe("event operations preview", () => {
 
     expect(first.mode).toBe("preview");
     expect(first.luma.connected).toBe(true);
-    expect(first.luma.availableCalendars).toHaveLength(3);
-    expect(first.luma.calendar.active).toBe(true);
+    expect(first.luma.availableCalendars.map((calendar) => calendar.name)).toEqual(["Simply Books", "Prologue"]);
+    expect(first.luma.calendar.name).toBe("Simply Books");
     expect(first.luma.approved).toBe(second.luma.approved);
     expect(first.tasks).toHaveLength(10);
     expect(first.stock[0]).toMatchObject({ title: "The Preview Book", isbn: "9780000000001", reserved: expect.any(Number) });

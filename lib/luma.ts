@@ -56,23 +56,11 @@ export class LumaApiError extends Error {
 }
 
 function configuredCalendars(): LumaCalendarConfig[] {
-  const defaults: Array<Omit<LumaCalendarConfig, "apiKey" | "active"> & { apiKeyEnv: string }> = [
-    { id: "shared", name: "Backstage Events", slug: "backstage-events", location: "All venues", apiKeyEnv: "LUMA_SHARED_API_KEY" },
-    { id: "simply", name: "Simply Books Events", slug: "simply-books", location: "Simply Books", apiKeyEnv: "LUMA_SIMPLY_API_KEY" },
-    { id: "prologue", name: "Prologue Events", slug: "prologue", location: "Prologue", apiKeyEnv: "LUMA_PROLOGUE_API_KEY" },
+  const calendars: Array<Omit<LumaCalendarConfig, "apiKey" | "active"> & { apiKeyEnv: string }> = [
+    { id: "simply", name: "Simply Books", slug: "simply-books", location: "Simply Books", apiKeyEnv: "LUMA_SIMPLY_API_KEY" },
+    { id: "prologue", name: "Prologue", slug: "prologue", location: "Prologue", apiKeyEnv: "LUMA_PROLOGUE_API_KEY" },
   ];
-
-  let rows = defaults;
-  if (process.env.LUMA_CALENDARS_JSON) {
-    try {
-      const parsed = JSON.parse(process.env.LUMA_CALENDARS_JSON) as typeof defaults;
-      if (Array.isArray(parsed) && parsed.length) rows = parsed;
-    } catch {
-      throw new LumaApiError("LUMA_CALENDARS_JSON is not valid JSON.");
-    }
-  }
-
-  return rows.map((row) => {
+  return calendars.map((row) => {
     const apiKey = process.env[row.apiKeyEnv]?.trim() ?? "";
     return { id: row.id, name: row.name, slug: row.slug, location: row.location as CalendarLocation, apiKey, active: Boolean(apiKey) };
   });
@@ -83,24 +71,26 @@ export function isLumaLive(): boolean {
 }
 
 export function publicLumaCalendars(): LumaCalendarPreview[] {
-  return configuredCalendars().map((calendar) => ({
+  return configuredCalendars().map(toPublicCalendar);
+}
+
+function toPublicCalendar(calendar: LumaCalendarConfig): LumaCalendarPreview {
+  return {
     id: calendar.id,
     name: calendar.name,
     slug: calendar.slug,
     location: calendar.location,
     active: calendar.active,
-  }));
+  };
 }
 
-function calendarForEvent(event: ShowEvent, id?: string): LumaCalendarConfig {
-  const calendars = configuredCalendars();
+function calendarForEvent(event: ShowEvent, calendars: LumaCalendarConfig[], id?: string): LumaCalendarConfig {
   const selected = id ? calendars.find((calendar) => calendar.id === id) : undefined;
   if (selected?.active) return selected;
-  const preferred = event.location ?? (event.venueName.includes("Simply") ? "Simply Books" : event.venueName.includes("Prologue") ? "Prologue" : "All venues");
+  const preferred = event.location ?? (event.venueName.includes("Simply") ? "Simply Books" : event.venueName.includes("Prologue") ? "Prologue" : null);
   const matching = calendars.find((calendar) => calendar.active && calendar.location === preferred);
-  const shared = calendars.find((calendar) => calendar.active && calendar.location === "All venues");
-  const calendar = matching ?? shared ?? calendars.find((candidate) => candidate.active);
-  if (!calendar) throw new LumaApiError("No active Luma calendar key is configured.", 503);
+  const calendar = matching ?? calendars.find((candidate) => candidate.active);
+  if (!calendar) throw new LumaApiError("Add the Simply Books and Prologue Luma calendar keys in Vercel.", 503);
   return calendar;
 }
 
@@ -140,6 +130,37 @@ async function lumaRequest<T>(calendar: LumaCalendarConfig, path: string, init: 
   }
 }
 
+interface LumaCalendarRecord {
+  id: string;
+  name: string;
+  slug: string | null;
+  url: string;
+}
+
+let verifiedCalendarCache: { expiresAt: number; calendars: LumaCalendarConfig[] } | null = null;
+
+function normalizedCalendarName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+async function verifiedCalendars(): Promise<LumaCalendarConfig[]> {
+  if (verifiedCalendarCache && verifiedCalendarCache.expiresAt > Date.now()) return verifiedCalendarCache.calendars;
+  const configured = configuredCalendars();
+  const verified = await Promise.all(configured.map(async (calendar) => {
+    if (!calendar.active) return calendar;
+    const actual = await lumaRequest<LumaCalendarRecord>(calendar, "/v1/calendars/get");
+    const expectedName = normalizedCalendarName(calendar.name);
+    const actualName = normalizedCalendarName(actual.name);
+    if (actualName !== expectedName) {
+      const envName = calendar.id === "simply" ? "LUMA_SIMPLY_API_KEY" : "LUMA_PROLOGUE_API_KEY";
+      throw new LumaApiError(`${envName} belongs to “${actual.name}”, not “${calendar.name}”.`, 503);
+    }
+    return { ...calendar, slug: actual.slug ?? calendar.slug };
+  }));
+  verifiedCalendarCache = { expiresAt: Date.now() + 5 * 60_000, calendars: verified };
+  return verified;
+}
+
 function normalizedLumaUrl(value: string): string {
   try {
     const url = new URL(value.startsWith("http") ? value : `https://${value}`);
@@ -166,8 +187,8 @@ async function findEventByUrl(calendar: LumaCalendarConfig, lumaLink: string): P
   return null;
 }
 
-async function resolveEvent(event: ShowEvent): Promise<{ calendar: LumaCalendarConfig; event: LumaEventRecord }> {
-  for (const calendar of configuredCalendars().filter((candidate) => candidate.active)) {
+async function resolveEvent(event: ShowEvent, calendars: LumaCalendarConfig[]): Promise<{ calendar: LumaCalendarConfig; event: LumaEventRecord }> {
+  for (const calendar of calendars.filter((candidate) => candidate.active)) {
     const match = await findEventByUrl(calendar, event.lumaLink);
     if (match) {
       const full = await lumaRequest<LumaEventRecord>(calendar, `/v1/events/get?event_id=${encodeURIComponent(match.id)}`);
@@ -194,9 +215,10 @@ async function listAllGuests(calendar: LumaCalendarConfig, eventId: string): Pro
 const TICKET_COLORS = ["#AD3B28", "#B0812F", "#5F7355", "#3D6670", "#6C5A82"];
 
 export async function getLiveLumaPreview(event: ShowEvent): Promise<LumaPreview> {
-  const calendars = publicLumaCalendars();
+  const verified = await verifiedCalendars();
+  const calendars = verified.map(toPublicCalendar);
   if (!event.lumaLink) {
-    const selected = calendarForEvent(event);
+    const selected = calendarForEvent(event, verified);
     return {
       connected: false,
       integration: "live",
@@ -218,7 +240,7 @@ export async function getLiveLumaPreview(event: ShowEvent): Promise<LumaPreview>
     };
   }
 
-  const resolved = await resolveEvent(event);
+  const resolved = await resolveEvent(event, verified);
   const [ticketResult, guests] = await Promise.all([
     lumaRequest<{ entries: LumaTicketTypeRecord[] }>(resolved.calendar, `/v1/events/ticket-types/list?event_id=${encodeURIComponent(resolved.event.id)}&include_hidden=true`),
     listAllGuests(resolved.calendar, resolved.event.id),
@@ -291,7 +313,7 @@ function zonedDateTimeToUtc(date: string, time: string, timeZone = DEFAULT_TIMEZ
 
 export async function createLumaEvent(event: ShowEvent, calendarId?: string): Promise<{ id: string; url: string }> {
   if (!event.date || !event.time) throw new LumaApiError("Add an event date and time before pushing to Luma.", 400);
-  const calendar = calendarForEvent(event, calendarId);
+  const calendar = calendarForEvent(event, await verifiedCalendars(), calendarId);
   const capacity = Math.max(0, (event.bookTicket ?? 0) + (event.ticketOnly ?? 0));
   const name = event.leadTitle ? `${event.name} — ${event.leadTitle}` : event.name;
   const description = [event.format, event.notes].filter(Boolean).join("\n\n");
@@ -314,7 +336,7 @@ export async function createLumaEvent(event: ShowEvent, calendarId?: string): Pr
 
 export async function validateLumaEventUrl(event: ShowEvent, url: string): Promise<string> {
   const candidate = { ...event, lumaLink: url };
-  const resolved = await resolveEvent(candidate);
+  const resolved = await resolveEvent(candidate, await verifiedCalendars());
   return resolved.event.url;
 }
 
@@ -332,4 +354,4 @@ export function verifyLumaWebhook(rawBody: string, signatureHeader: string, secr
   return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
 }
 
-export const lumaInternals = { normalizedLumaUrl, zonedDateTimeToUtc };
+export const lumaInternals = { normalizedCalendarName, normalizedLumaUrl, zonedDateTimeToUtc };

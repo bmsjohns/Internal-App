@@ -150,12 +150,11 @@ function buildLuma(event: ShowEvent): LumaPreview {
   const days = daysUntil(event.date);
   const capacity = event.bookTicket || event.ticketOnly || (event.venueName.includes("café") ? 45 : event.venueName.includes("Simply") ? 60 : 150);
   const calendars: LumaCalendarPreview[] = [
-    { id: "cal-backstage", name: "Backstage Events", slug: "backstage-events", location: "All venues", active: true },
-    { id: "cal-simply", name: "Simply Books Events", slug: "simply-books", location: "Simply Books", active: false },
-    { id: "cal-prologue", name: "Prologue Events", slug: "prologue", location: "Prologue", active: false },
+    { id: "simply", name: "Simply Books", slug: "simply-books", location: "Simply Books", active: false },
+    { id: "prologue", name: "Prologue", slug: "prologue", location: "Prologue", active: false },
   ];
-  const preferredLocation = event.location ?? (event.venueName.includes("Simply") ? "Simply Books" : event.venueName.includes("Prologue") ? "Prologue" : "All venues");
-  const calendar = calendars.find((candidate) => candidate.active && (candidate.location === preferredLocation || candidate.location === "All venues")) ?? calendars[0];
+  const preferredLocation = event.location ?? (event.venueName.includes("Simply") ? "Simply Books" : event.venueName.includes("Prologue") ? "Prologue" : null);
+  const calendar = calendars.find((candidate) => candidate.location === preferredLocation) ?? calendars[0];
   if (!linked) {
     return {
       connected: false,

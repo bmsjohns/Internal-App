@@ -10,22 +10,21 @@ registration closed** so ticket pricing can be checked in Luma before launch.
 Luma API access requires Luma Plus. In Luma, open the calendar, then go to
 **Settings → Developer** and create an API key. Each calendar has its own key.
 
-Add these server-only variables in Vercel for the Preview environment first:
+Create a separate key for each of the two calendars, then add these server-only
+variables in Vercel for the Preview environment first:
 
 ```text
 LUMA_MODE=live
-LUMA_SHARED_API_KEY=<calendar key>
+LUMA_SIMPLY_API_KEY=<Simply Books calendar key>
+LUMA_PROLOGUE_API_KEY=<Prologue calendar key>
 ```
 
 Do not add either value with a `NEXT_PUBLIC_` prefix and do not paste the key
 into Backstage or source control. Redeploy the preview after adding variables.
 
-The integration already has optional slots for future calendars:
-
-```text
-LUMA_SIMPLY_API_KEY=<future Simply Books calendar key>
-LUMA_PROLOGUE_API_KEY=<future Prologue calendar key>
-```
+Backstage checks `/v1/calendars/get` before using either key. A key assigned to
+the wrong variable is rejected with a configuration error instead of showing
+or updating the wrong calendar.
 
 ## 2. Test read access
 

@@ -1,8 +1,31 @@
 import { createHmac } from "crypto";
 import { describe, expect, it } from "vitest";
-import { lumaInternals, verifyLumaWebhook } from "@/lib/luma";
+import { isLumaLive, lumaInternals, publicLumaCalendars, verifyLumaWebhook } from "@/lib/luma";
 
 describe("Luma integration safety", () => {
+  it("only exposes the two real shop calendars", () => {
+    expect(publicLumaCalendars().map(({ id, name, location }) => ({ id, name, location }))).toEqual([
+      { id: "simply", name: "Simply Books", location: "Simply Books" },
+      { id: "prologue", name: "Prologue", location: "Prologue" },
+    ]);
+  });
+
+  it("does not treat the retired shared-key variable as a calendar", () => {
+    const previousMode = process.env.LUMA_MODE;
+    const previousSharedKey = process.env.LUMA_SHARED_API_KEY;
+    const previousSimplyKey = process.env.LUMA_SIMPLY_API_KEY;
+    const previousPrologueKey = process.env.LUMA_PROLOGUE_API_KEY;
+    process.env.LUMA_MODE = "live";
+    process.env.LUMA_SHARED_API_KEY = "retired-key";
+    delete process.env.LUMA_SIMPLY_API_KEY;
+    delete process.env.LUMA_PROLOGUE_API_KEY;
+    expect(isLumaLive()).toBe(false);
+    if (previousMode === undefined) delete process.env.LUMA_MODE; else process.env.LUMA_MODE = previousMode;
+    if (previousSharedKey === undefined) delete process.env.LUMA_SHARED_API_KEY; else process.env.LUMA_SHARED_API_KEY = previousSharedKey;
+    if (previousSimplyKey === undefined) delete process.env.LUMA_SIMPLY_API_KEY; else process.env.LUMA_SIMPLY_API_KEY = previousSimplyKey;
+    if (previousPrologueKey === undefined) delete process.env.LUMA_PROLOGUE_API_KEY; else process.env.LUMA_PROLOGUE_API_KEY = previousPrologueKey;
+  });
+
   it("normalizes supported Luma links and rejects lookalike domains", () => {
     expect(lumaInternals.normalizedLumaUrl("https://lu.ma/My-Event/")).toBe("/my-event");
     expect(lumaInternals.normalizedLumaUrl("luma.com/my-event?utm_source=test")).toBe("/my-event");

@@ -111,6 +111,7 @@ export default function OrdersQueue() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search title, author, customer or ISBN"
+              aria-label="Search orders by title, author, customer or ISBN"
               className="w-full rounded border border-cream-2 bg-white py-2.5 pl-9 pr-3 text-sm text-ink"
             />
           </div>

@@ -6,6 +6,10 @@ import { getClubsDataSource } from "@/lib/data/clubs";
 import { getHubDataSource } from "@/lib/data/hub";
 import { isStaleDraft } from "@/lib/hub";
 import { briefingEvents, todayLondon } from "@/lib/briefing";
+import type { VenueKey } from "@/lib/config";
+import type { Location } from "@/lib/types";
+
+const LOCATION: Record<VenueKey, Location> = { prologue: "Prologue", simply: "Simply Books" };
 
 // The whole day's briefing in one call. Visible to every logged-in user —
 // it's the landing page (spec §9 default assumption) — so events are read
@@ -26,6 +30,13 @@ export async function GET(req: NextRequest) {
       .listEvents()
       .catch(() => []), // events failing must not blank the whole briefing
   ]);
+  const visibleVenues = (Object.keys(LOCATION) as VenueKey[]).filter((venue) => can(user, "briefing.view", LOCATION[venue]));
+  const hiddenVenue = { roster: [], tasks: [], slack: [], wrap: null, wrapToday: null, stats: [], opening: { hours: "", note: "" } };
+  for (const venue of Object.keys(LOCATION) as VenueKey[]) {
+    if (!visibleVenues.includes(venue)) day.venues[venue] = hiddenVenue;
+  }
+  day.alerts = day.alerts.filter((alert) => alert.loc === "both" || visibleVenues.includes(alert.loc));
+  day.milestones = day.milestones.filter((milestone) => milestone.venue === "both" || visibleVenues.includes(milestone.venue));
   // Posting urgent alerts is manager-only (§ access). The client hides the
   // control accordingly; the POST route enforces it server-side too.
   const viewer = { canPostAlert: can(user, "briefing.alerts.manage") };
@@ -49,5 +60,6 @@ export async function GET(req: NextRequest) {
     console.error("briefing ops flags failed", e);
   }
 
-  return NextResponse.json({ day, events: briefingEvents(allEvents, date), viewer, opsFlags });
+  const visibleEvents = allEvents.filter((event) => !event.location || can(user, "briefing.view", event.location));
+  return NextResponse.json({ day, events: briefingEvents(visibleEvents, date), viewer, opsFlags });
 }

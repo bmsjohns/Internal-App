@@ -43,7 +43,7 @@ export default function SuppliersPanel() {
   }
 
   async function removeRow(id: string, name: string) {
-    if (!confirm(`Remove supplier “${name}”? Orders already assigned to it keep the name.`)) return;
+    if (!(await confirmAction(`Remove supplier “${name}”? Orders already assigned to it keep the name.`, "Remove supplier"))) return;
     setBusy(true);
     setError("");
     try {
@@ -126,3 +126,4 @@ export default function SuppliersPanel() {
     </div>
   );
 }
+import { confirmAction } from "@/lib/dialogs";

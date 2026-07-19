@@ -55,7 +55,7 @@ export default function VenueEditor({ initial, canEdit = true }: { initial?: Ven
 
   async function remove() {
     if (!canEdit) return;
-    if (isNew || !confirm(`Delete “${draft.name}”? This cannot be undone.`)) return;
+    if (isNew || !(await confirmAction(`Delete “${draft.name}”? This cannot be undone.`, "Delete venue"))) return;
     setBusy(true);
     setError("");
     try {
@@ -171,3 +171,4 @@ export default function VenueEditor({ initial, canEdit = true }: { initial?: Ven
     </div>
   );
 }
+import { confirmAction } from "@/lib/dialogs";

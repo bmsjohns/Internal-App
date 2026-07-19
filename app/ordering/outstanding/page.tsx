@@ -19,6 +19,7 @@ export default function OutstandingPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
+  const [receiptQty, setReceiptQty] = useState<Record<string, number>>({});
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -56,6 +57,24 @@ export default function OutstandingPage() {
     }
   };
 
+  const receive = async (line: HubLine) => {
+    const remaining = Math.max(0, line.quantity - line.receivedQuantity);
+    const quantity = Math.min(remaining, Math.max(1, receiptQty[line.id] ?? remaining));
+    if (quantity === 0 || busy) return;
+    setBusy(true);
+    try {
+      const res = await post("/api/hub/arrive", { receipts: [{ lineId: line.id, quantity }] });
+      refresh();
+      setReceiptQty((values) => ({ ...values, [line.id]: Math.max(0, remaining - quantity) }));
+      showToast(quantity === remaining ? "Delivery complete" : `Received ${quantity}; ${remaining - quantity} still outstanding`);
+      if (res.writeBack?.length) showToast("Delivery complete — originating order updated");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Receiving failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggle = (id: string) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -86,7 +105,7 @@ export default function OutstandingPage() {
       <ModuleHeader
         eyebrow="Ordering hub · flow C"
         title="Outstanding orders"
-        subtitle="Sent but not yet arrived — this is what gets chased. Confirm arrival per line, or select several; there are no partial receipts."
+        subtitle="Sent but not yet fully received — record partial deliveries as they arrive and keep the remaining copies visible for chasing."
       />
       {error ? (
         <p className="px-8 py-10 text-sm font-semibold text-rust">{error}</p>
@@ -158,7 +177,7 @@ export default function OutstandingPage() {
               label: "Qty",
               align: "center",
               sortValue: (l) => l.quantity,
-              render: (l) => <span className="tabular-nums">×{l.quantity}</span>,
+              render: (l) => <span className="tabular-nums">{l.receivedQuantity}/{l.quantity}</span>,
             },
             {
               key: "sent",
@@ -187,22 +206,15 @@ export default function OutstandingPage() {
               label: "",
               sortable: false,
               align: "right",
-              render: (l) => (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    arrive([l.id]);
-                  }}
-                  disabled={busy}
-                  className="inline-flex cursor-pointer items-center gap-1.5 border-none bg-transparent text-[12.5px] font-semibold disabled:opacity-50"
-                  style={{ color: accent }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                  Mark arrived
-                </button>
-              ),
+              render: (l) => {
+                const remaining = l.quantity - l.receivedQuantity;
+                return (
+                  <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
+                    <input type="number" min={1} max={remaining} value={receiptQty[l.id] ?? remaining} onChange={(event) => setReceiptQty((values) => ({ ...values, [l.id]: Number(event.target.value) }))} aria-label={`Copies received for ${l.title}`} className="w-16 rounded-md border border-cream-2 px-2 py-1.5 text-center text-xs tabular-nums" />
+                    <button onClick={() => receive(l)} disabled={busy} className="text-[12.5px] font-semibold disabled:opacity-50" style={{ color: accent }}>Receive</button>
+                  </div>
+                );
+              },
             },
           ]}
           card={(l) => (
@@ -212,21 +224,16 @@ export default function OutstandingPage() {
                 <SourceBadge {...HUB_SOURCES[l.source]} />
               </div>
               <div className="mb-2 mt-0.5 text-xs text-stone">
-                {pubName(l)} · {l.account} · ×{l.quantity}
+                {pubName(l)} · {l.account} · {l.receivedQuantity}/{l.quantity} received
               </div>
               <div className="flex items-center justify-between">
                 <span className={`text-[13px] font-semibold tabular-nums ${daysOut(l) > 14 ? "text-coral" : "text-charcoal"}`}>
                   {daysOut(l)} days out
                 </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    arrive([l.id]);
-                  }}
-                  className="cursor-pointer rounded-md border-[1.5px] border-cream-2 bg-white px-3 py-1.5 text-xs font-semibold text-charcoal"
-                >
-                  Mark arrived
-                </button>
+                <div className="flex items-center gap-2">
+                  <input type="number" min={1} max={l.quantity - l.receivedQuantity} value={receiptQty[l.id] ?? (l.quantity - l.receivedQuantity)} onChange={(event) => setReceiptQty((values) => ({ ...values, [l.id]: Number(event.target.value) }))} aria-label={`Copies received for ${l.title}`} className="w-14 rounded-md border border-cream-2 px-2 py-1.5 text-center text-xs" />
+                  <button onClick={(event) => { event.stopPropagation(); receive(l); }} className="rounded-md border-[1.5px] border-cream-2 bg-white px-3 py-1.5 text-xs font-semibold text-charcoal">Receive</button>
+                </div>
               </div>
             </div>
           )}

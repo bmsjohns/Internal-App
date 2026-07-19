@@ -65,7 +65,7 @@ export default function ReturnsStagingPage() {
     const blocked = requests.length - ready.length;
     setBusyId("all");
     try {
-      for (const r of ready) await post("/api/returns", { action: "submit", id: r.id });
+      if (ready.length > 0) await post("/api/returns", { action: "submitMany", ids: ready.map((request) => request.id) });
       refresh();
       showToast(blocked > 0 ? `${blocked} still need a route` : `${ready.length} submitted for approval`);
     } catch (e) {

@@ -237,6 +237,7 @@ export default function NewReturnPage() {
               onChange={(e) => setScan(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addScan(scan, qty))}
               placeholder="Scan barcode or type ISBN, then Enter"
+              aria-label="Scan barcode or type ISBN"
               className="w-full rounded-lg border-[1.5px] bg-white py-3 pl-10 pr-3 text-[15px] text-ink"
               style={{ borderColor: accent }}
               inputMode="numeric"

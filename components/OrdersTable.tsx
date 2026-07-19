@@ -47,6 +47,11 @@ export default function OrdersTable({
                   )}
                 </div>
                 <div className="mt-0.5 text-[12.5px] text-stone">{o.author}{o.isbn && ` · ${o.isbn}`}</div>
+                {showCustomer && (
+                  <div className="mt-1 text-[12.5px] font-medium text-charcoal md:hidden">
+                    {o.customerName ?? "Customer not recorded"}{o.customerPhone ? ` · ${o.customerPhone}` : ""}
+                  </div>
+                )}
               </Link>
             </td>
             {showCustomer && (

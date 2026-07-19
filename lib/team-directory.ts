@@ -46,11 +46,11 @@ declare global {
 
 function seedTeam(): TeamMember[] {
   globalThis.__backstageMockTeam ??= [
-    { id: "dev-user", name: process.env.DEV_AUTH_NAME ?? "Ben Johns", email: "ben@prologuebooks.co.uk", role: "admin", locations: [...LOCATIONS], overrides: [], active: true, lastActiveAt: new Date().toISOString() },
-    { id: "lynsey", name: "Lynsey Moore", email: "lynsey@prologuebooks.co.uk", role: "events-lead", locations: ["Prologue"], overrides: [], active: true, lastActiveAt: "2026-07-18T16:42:00.000Z" },
-    { id: "karen", name: "Karen Patel", email: "karen@simplybooks.info", role: "manager", locations: ["Simply Books"], overrides: [{ permission: "ordering.send", location: "Simply Books", effect: "revoke" }], active: true, lastActiveAt: "2026-07-19T07:51:00.000Z" },
-    { id: "chloe", name: "Chloe Bennett", email: "chloe@prologuebooks.co.uk", role: "bar-floor-staff", locations: ["Prologue"], overrides: [], active: true, lastActiveAt: "2026-07-17T21:05:00.000Z" },
-    { id: "sarah", name: "Sarah Evans", email: "sarah@simplybooks.info", role: "book-club-manager", locations: ["Simply Books"], overrides: [{ permission: "ordering.send", location: "Simply Books", effect: "grant" }], active: true, lastActiveAt: "2026-07-18T12:10:00.000Z" },
+    { id: "dev-user", name: process.env.DEV_AUTH_NAME ?? "Development Admin", email: process.env.DEV_AUTH_EMAIL ?? "admin@example.test", role: "admin", locations: [...LOCATIONS], overrides: [], active: true, lastActiveAt: new Date().toISOString() },
+    { id: "events-demo", name: "Events Demo", email: "events@example.test", role: "events-lead", locations: ["Prologue"], overrides: [], active: true, lastActiveAt: "2026-07-18T16:42:00.000Z" },
+    { id: "manager-demo", name: "Manager Demo", email: "manager@example.test", role: "manager", locations: ["Simply Books"], overrides: [{ permission: "ordering.send", location: "Simply Books", effect: "revoke" }], active: true, lastActiveAt: "2026-07-19T07:51:00.000Z" },
+    { id: "staff-demo", name: "Staff Demo", email: "staff@example.test", role: "bar-floor-staff", locations: ["Prologue"], overrides: [], active: true, lastActiveAt: "2026-07-17T21:05:00.000Z" },
+    { id: "clubs-demo", name: "Clubs Demo", email: "clubs@example.test", role: "book-club-manager", locations: ["Simply Books"], overrides: [{ permission: "ordering.send", location: "Simply Books", effect: "grant" }], active: true, lastActiveAt: "2026-07-18T12:10:00.000Z" },
   ];
   return globalThis.__backstageMockTeam;
 }

@@ -8,7 +8,7 @@ import type {
   ReturnStatus,
 } from "@/lib/types";
 import type { ReturnsDataSource } from "./returns-source";
-import { atBase, atBaseList, parseLog, requireBackstageBase, serialiseLog } from "./backstage-base";
+import { atBase, atBaseContent, atBaseList, parseLog, requireBackstageBase, serialiseLog } from "./backstage-base";
 import { pickComplete, returnStatusMeta, statusIndex } from "@/lib/returns";
 
 // Airtable implementation of the Returns seam. Two app-owned tables in the
@@ -26,6 +26,7 @@ import { pickComplete, returnStatusMeta, statusIndex } from "@/lib/returns";
 
 const REQUESTS = "Return Requests";
 const LINES = "Return Lines";
+const RA_ATTACHMENT_FIELD = "RA Attachment";
 
 const STATUS_TO: Record<ReturnStatus, string> = {
   requested: "Requested",
@@ -139,6 +140,18 @@ export const airtableReturnsDataSource: ReturnsDataSource = {
     } catch {
       return null;
     }
+  },
+
+  async uploadApproval(id, file) {
+    const baseId = await base();
+    await getOne(baseId, id);
+    await atBaseContent(
+      baseId,
+      `${encodeURIComponent(REQUESTS)}/${id}/${encodeURIComponent(RA_ATTACHMENT_FIELD)}/uploadAttachment`,
+      file
+    );
+    const current = await getOne(baseId, id);
+    return patchRequest(baseId, current, { "RA Filename": file.filename }, entry("System", `Approval form uploaded (${file.filename})`));
   },
 
   async createRequests(inputs, byName) {

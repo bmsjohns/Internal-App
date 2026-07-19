@@ -21,7 +21,11 @@ export async function GET() {
     getReturnsDataSource().listReturns(),
     getHubDataSource().listPublishers(),
   ]);
-  return NextResponse.json({ returns, publishers, userName: user.name });
+  return NextResponse.json({
+    returns: returns.filter((request) => can(user, "returns.view", request.location)),
+    publishers,
+    userName: user.name,
+  });
 }
 
 const VALID_STATUS = new Set(RETURN_STATUSES.map((s) => s.key));
@@ -33,6 +37,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const src = getReturnsDataSource();
   try {
+    if (body?.action !== "create" && body?.action !== "submitMany" && typeof body?.id === "string") {
+      const target = await src.getReturn(body.id);
+      if (!target) return NextResponse.json({ error: "Return not found" }, { status: 404 });
+      if (!can(user, "returns.manage", target.location)) {
+        return NextResponse.json({ error: `No returns access for ${target.location}` }, { status: 403 });
+      }
+    }
     switch (body?.action) {
       case "create": {
         const inputs = (Array.isArray(body.requests) ? body.requests : []) as ReturnRequestInput[];
@@ -40,6 +51,9 @@ export async function POST(req: NextRequest) {
         for (const input of inputs) {
           if (!LOCATIONS.includes(input.location)) {
             return NextResponse.json({ error: "A valid location is required" }, { status: 400 });
+          }
+          if (!can(user, "returns.manage", input.location)) {
+            return NextResponse.json({ error: `No returns access for ${input.location}` }, { status: 403 });
           }
           if (!Array.isArray(input.lines) || input.lines.length === 0) {
             return NextResponse.json({ error: "Requests are always itemised — add at least one line" }, { status: 400 });
@@ -60,6 +74,9 @@ export async function POST(req: NextRequest) {
         if (!body.id || !["direct", "gardners"].includes(body.route)) {
           return NextResponse.json({ error: "id and a valid route are required" }, { status: 400 });
         }
+        const request = await src.getReturn(body.id);
+        if (!request) return NextResponse.json({ error: "Return not found" }, { status: 404 });
+        if (!can(user, "returns.manage", request.location)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         return NextResponse.json({ request: await src.setRoute(body.id, body.route, user.name) });
       }
       case "discard": {
@@ -70,6 +87,32 @@ export async function POST(req: NextRequest) {
       case "submit": {
         if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
         return NextResponse.json({ request: await src.submit(body.id, user.name) });
+      }
+      case "submitMany": {
+        const ids: string[] = Array.isArray(body.ids)
+          ? [...new Set<string>(body.ids.filter((id: unknown): id is string => typeof id === "string"))]
+          : [];
+        if (ids.length === 0) return NextResponse.json({ error: "No returns selected" }, { status: 400 });
+        const targets = await Promise.all(ids.map((id) => src.getReturn(id)));
+        if (targets.some((target) => !target)) return NextResponse.json({ error: "One or more returns no longer exist" }, { status: 409 });
+        for (const target of targets) {
+          if (!target || !can(user, "returns.manage", target.location)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          if (target.status !== "requested" || !target.route) {
+            return NextResponse.json({ error: `${target.code} is no longer ready to submit` }, { status: 409 });
+          }
+        }
+        const submitted = [];
+        for (const target of targets) {
+          try {
+            submitted.push(await src.submit(target!.id, user.name));
+          } catch (error) {
+            return NextResponse.json({
+              error: `Submitted ${submitted.length} of ${targets.length}; ${target!.code} failed: ${error instanceof Error ? error.message : "unknown error"}`,
+              submittedIds: submitted.map((request) => request.id),
+            }, { status: 409 });
+          }
+        }
+        return NextResponse.json({ returns: submitted });
       }
       case "approve": {
         if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 400 });

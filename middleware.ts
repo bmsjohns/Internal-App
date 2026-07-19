@@ -1,16 +1,12 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { authMode } from "@/lib/auth-config";
+import { PUBLIC_ROUTES } from "@/lib/public-routes";
 
 // Stripe's webhook calls carry no Clerk session — it authenticates itself
 // via HMAC signature (lib/stripe.ts verifyWebhookSignature), so it must be
 // reachable without a login rather than 404ing behind auth.protect().
-const isPublic = createRouteMatcher([
-  "/sign-in(.*)",
-  "/manifest.webmanifest",
-  "/icon.svg",
-  "/api/stripe/webhook",
-]);
+const isPublic = createRouteMatcher([...PUBLIC_ROUTES]);
 
 const mode = authMode(process.env);
 

@@ -77,6 +77,22 @@ export async function atBase(baseId: string, path: string, init?: RequestInit): 
   }
 }
 
+/** Upload attachment bytes without exposing them at a public URL. */
+export async function atBaseContent(baseId: string, path: string, body: {
+  filename: string;
+  contentType: string;
+  base64: string;
+}): Promise<any> {
+  const res = await fetch(`https://content.airtable.com/v0/${baseId}/${path}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ filename: body.filename, contentType: body.contentType, file: body.base64 }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Airtable attachment upload ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
 export async function atBaseList(baseId: string, table: string, extra?: Record<string, string>): Promise<any[]> {
   const records: any[] = [];
   let offset: string | undefined;

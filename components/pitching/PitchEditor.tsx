@@ -144,7 +144,7 @@ export default function PitchEditor({ pitch }: { pitch: Pitch }) {
   }
 
   async function remove() {
-    if (!confirm(`Delete the pitch for ${pitch.authorName}? This can’t be undone.`)) return;
+    if (!(await confirmAction(`Delete the pitch for ${pitch.authorName}? This can’t be undone.`, "Delete pitch"))) return;
     setBusy(true);
     const res = await fetch(`/api/pitches/${pitch.id}`, { method: "DELETE" });
     if (res.ok) {
@@ -507,3 +507,4 @@ export default function PitchEditor({ pitch }: { pitch: Pitch }) {
     </div>
   );
 }
+import { confirmAction } from "@/lib/dialogs";

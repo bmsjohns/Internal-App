@@ -74,6 +74,7 @@ export default function EventEditor({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef<Promise<void> | null>(null);
   const mounted = useRef(true);
+  const recoveryKey = `backstage-event-draft-${initial.id}`;
   const flush = useCallback((keepalive = false): Promise<void> => {
     if (inFlight.current) return inFlight.current;
     const run = async () => {
@@ -93,6 +94,7 @@ export default function EventEditor({
             setSaveState("saved");
             setError("");
           }
+          try { sessionStorage.removeItem(recoveryKey); } catch {}
         } catch (e) {
           // A failed older payload is merged behind any newer field values.
           pending.current = { ...payload, ...pending.current };
@@ -108,27 +110,44 @@ export default function EventEditor({
       inFlight.current = null;
     });
     return inFlight.current;
-  }, [initial.id]);
+  }, [initial.id, recoveryKey]);
 
   const set = useCallback(
     <K extends keyof ShowEventInput>(key: K, value: ShowEventInput[K]) => {
       setDraft((d) => ({ ...d, [key]: value }));
       if (isNew) return;
       (pending.current as any)[key] = value;
+      try { sessionStorage.setItem(recoveryKey, JSON.stringify(pending.current)); } catch {}
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void flush(), 700);
     },
-    [isNew, flush]
+    [isNew, flush, recoveryKey]
   );
   useEffect(() => {
     mounted.current = true;
+    try {
+      const recovered = sessionStorage.getItem(recoveryKey);
+      if (recovered) {
+        const patch = JSON.parse(recovered) as Partial<ShowEventInput>;
+        pending.current = patch;
+        setDraft((current) => ({ ...current, ...patch }));
+        setSaveState("error");
+        setError("Unsaved changes were recovered. Retry saving before leaving.");
+      }
+    } catch {}
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (Object.keys(pending.current).length === 0) return;
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
     return () => {
       mounted.current = false;
+      window.removeEventListener("beforeunload", warnBeforeUnload);
       if (timer.current) clearTimeout(timer.current);
       // keepalive asks the browser to finish this small PATCH during navigation.
       void flush(true);
     };
-  }, [flush]);
+  }, [flush, recoveryKey]);
 
   async function create() {
     if (!draft.name.trim()) {
@@ -154,7 +173,7 @@ export default function EventEditor({
   }
 
   async function remove() {
-    if (!confirm(`Delete “${draft.name}”? This can’t be undone here.`)) return;
+    if (!(await confirmAction(`Delete “${draft.name}”? This can’t be undone here.`, "Delete event"))) return;
     const res = await fetch(`/api/events/${initial.id}`, { method: "DELETE" });
     if (res.ok) router.push("/events");
     else setError("Couldn’t delete the event");
@@ -164,7 +183,7 @@ export default function EventEditor({
   const [venues, setVenues] = useState(meta.venues);
   const [hosts, setHosts] = useState(meta.hosts);
   async function quickAdd(kind: "venue" | "host") {
-    const name = prompt(kind === "venue" ? "New venue name" : "New host name")?.trim();
+    const name = await promptText(kind === "venue" ? "New venue name" : "New host name", kind === "venue" ? "Add venue" : "Add host");
     if (!name) return;
     const res = await fetch(kind === "venue" ? "/api/venues" : "/api/hosts", {
       method: "POST",
@@ -646,3 +665,4 @@ export default function EventEditor({
     </div>
   );
 }
+import { confirmAction, promptText } from "@/lib/dialogs";

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEventsDataSource } from "@/lib/data/events";
-import { can, getSessionUser } from "@/lib/auth";
+import { can, getSessionUser, isAdmin } from "@/lib/auth";
 import { parseHostBody } from "@/lib/events-api";
 
 export async function GET() {
@@ -10,13 +10,13 @@ export async function GET() {
     return NextResponse.json({ error: "No events access" }, { status: 403 });
   }
   const hosts = await getEventsDataSource().listHosts();
-  return NextResponse.json({ hosts, canEdit: can(user, "events:edit") });
+  return NextResponse.json({ hosts, canEdit: isAdmin(user) });
 }
 
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "events:edit")) {
+  if (!isAdmin(user)) {
     return NextResponse.json({ error: "No events edit access" }, { status: 403 });
   }
   const input = parseHostBody(await req.json());

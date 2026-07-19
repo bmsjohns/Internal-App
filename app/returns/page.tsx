@@ -176,6 +176,7 @@ export default function OutstandingReturnsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search title, ISBN, publisher, RA number…"
+              aria-label="Search returns by title, ISBN, publisher or RA number"
               className="w-full rounded-md border border-cream-2 bg-white py-2.5 pl-9 pr-3 text-sm text-ink"
             />
           </div>

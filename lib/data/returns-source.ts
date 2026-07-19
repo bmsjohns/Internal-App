@@ -10,6 +10,7 @@ import type { ReturnRequest, ReturnRequestInput, ReturnRoute, ReturnStatus } fro
 export interface ReturnsDataSource {
   listReturns(): Promise<ReturnRequest[]>;
   getReturn(id: string): Promise<ReturnRequest | null>;
+  uploadApproval(id: string, file: { filename: string; contentType: string; base64: string }): Promise<ReturnRequest>;
 
   /** One request per input (the builder splits by publisher client-side,
    *  mirroring how it renders — server just persists each). */

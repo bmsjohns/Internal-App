@@ -16,7 +16,7 @@ const MODULES = [
   { href: "/briefing", label: "Daily Briefing", permission: "briefing.view", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h9M8 13h9M8 17h6"/>' },
   { href: "/orders", label: "Orders", permission: "orders.view", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>' },
   { href: "/customers", label: "Customers", permission: "customers.view", icon: '<circle cx="12" cy="8" r="4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>' },
-  { href: "/to-order", label: "To order", permission: "orders.view", icon: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>' },
+  { href: "/to-order", label: "Customer ordering", permission: "orders.view", icon: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>' },
 ];
 
 // Events Phase 1 — only shown to the small pitching group (pitching:view).
@@ -85,7 +85,7 @@ const NAV_GROUPS: NavGroup[] = [
     children: [
       { href: "/ordering/staging", label: "Staging", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 11h8M8 15h5"/>', badge: "drafts" },
       { href: "/ordering/pending", label: "Pending queue", icon: '<path d="M3 3h2l2.4 12.5a1.5 1.5 0 0 0 1.5 1.2h8.7"/><circle cx="9.5" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/>', badge: "pending" },
-      { href: "/ordering/outstanding", label: "Outstanding", icon: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>', badge: "outstanding" },
+      { href: "/ordering/outstanding", label: "Awaiting delivery", icon: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>', badge: "outstanding" },
       { href: "/ordering/restock", label: "Restock", icon: '<path d="M4 7l8-4 8 4-8 4z"/><path d="M4 7v10l8 4 8-4V7"/>' },
       { href: "/ordering/publishers", label: "Publishers", icon: '<path d="M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M8 3v18"/>' },
     ],
@@ -98,13 +98,13 @@ const NAV_GROUPS: NavGroup[] = [
     children: [
       { href: "/returns/staging", label: "To be returned", icon: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5 5 5 0 0 1-5 5H8"/>', badge: "returnsStaging" },
       { href: "/returns/picklists", label: "Pick lists", icon: '<rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3h6v2"/><path d="M9 13l2 2 4-4"/>', badge: "returnsPick" },
-      { href: "/returns", label: "Outstanding", icon: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>', badge: "returnsOutstanding" },
+      { href: "/returns", label: "Awaiting resolution", icon: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>', badge: "returnsOutstanding" },
     ],
   },
 ];
 
 const NAV_COUNTS_REFRESH_MS = 30_000;
-let navCountsCache: { at: number; counts: Record<string, number> } | null = null;
+const navCountsCache = new Map<VenueSelection, { at: number; counts: Record<string, number> }>();
 
 // The sidebar re-renders on every navigation; without a throttle each click
 // hit /api/orders (two Airtable list reads) and quick navigation tripped
@@ -124,6 +124,8 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [navCounts, setNavCounts] = useState<Record<string, number>>({});
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [navCountsError, setNavCountsError] = useState(false);
   // Standalone, chrome-free surfaces: the day-of call sheet (its own access
   // tier + offline shell) and the printable call sheet.
   const bare = pathname.startsWith("/callsheet") || /^\/events\/[^/]+\/print/.test(pathname);
@@ -151,18 +153,25 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
   }, []);
 
   useEffect(() => {
-    if (navCountsCache && Date.now() - navCountsCache.at < NAV_COUNTS_REFRESH_MS) {
-      setNavCounts(navCountsCache.counts);
+    const cached = navCountsCache.get(venue);
+    if (cached && Date.now() - cached.at < NAV_COUNTS_REFRESH_MS) {
+      setNavCounts(cached.counts);
       return;
     }
-    fetch("/api/nav-counts")
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((counts: Record<string, number>) => {
-        navCountsCache = { at: Date.now(), counts };
-        setNavCounts(counts);
+    fetch(`/api/nav-counts?venue=${venue}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`Navigation counts failed (${r.status})`);
+        return r.json();
       })
-      .catch(() => {});
-  }, [pathname]);
+      .then((counts: Record<string, number>) => {
+        navCountsCache.set(venue, { at: Date.now(), counts });
+        setNavCounts(counts);
+        setNavCountsError(false);
+      })
+      .catch(() => setNavCountsError(true));
+  }, [pathname, venue]);
+
+  useEffect(() => setMobileOpen(false), [pathname]);
 
   const toggleGroup = (key: string) => {
     setOpenGroups((g) => {
@@ -187,6 +196,13 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
     { key: "simply", label: "Simply Books", dot: VENUES.simply.color, count: orders.filter((o) => o.location === "Simply Books").length },
     { key: "prologue", label: "Prologue", dot: VENUES.prologue.color, count: orders.filter((o) => o.location === "Prologue").length },
   ];
+  const mobileLinks = [
+    ...modules,
+    ...NAV_GROUPS.filter((group) => user?.permissions.includes(group.permission)).flatMap((group) => group.children),
+  ];
+  const mobileCurrent = mobileLinks
+    .filter((item) => pathname.startsWith(item.href))
+    .sort((a, b) => b.href.length - a.href.length)[0];
 
   const label = "eyebrow mx-1 mb-2 text-stone";
 
@@ -195,44 +211,22 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="fixed inset-x-0 top-0 z-20 flex items-center gap-3 border-b border-cream-2 bg-white px-4 py-2.5 lg:hidden">
+      <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-3 border-b border-cream-2 bg-white px-3 py-2.5 lg:hidden">
         <Image src="/assets/p-mark-red.png" alt="" width={22} height={29} />
-        <nav className="flex gap-1 overflow-x-auto">
-          {(() => {
-            const flat = [
-              ...modules,
-              // Mobile keeps a flat bar: each group's screens join it directly.
-              ...NAV_GROUPS.filter((g) => user?.permissions.includes(g.permission)).flatMap((g) => g.children),
-            ];
-            // Longest matching href wins, so "/returns" doesn't light up
-            // alongside its own sub-screens ("/returns/staging" etc.).
-            const best = flat
-              .filter((m) => pathname.startsWith(m.href))
-              .sort((a, b) => b.href.length - a.href.length)[0]?.href;
-            return flat.map((m) => (
-              <Link
-                key={m.href}
-                href={m.href}
-                className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13px] font-semibold ${
-                  m.href === best ? "bg-shell text-rust" : "text-charcoal"
-                }`}
-              >
-                {m.label}
-              </Link>
-            ));
-          })()}
-          {(user?.permissions.includes("settings:manage") || user?.permissions.includes("team.manage")) && (
-            <Link
-              href="/settings"
-              className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13px] font-semibold ${
-                pathname.startsWith("/settings") ? "bg-shell text-rust" : "text-charcoal"
-              }`}
-            >
-              Settings
-            </Link>
-          )}
-        </nav>
+        <button
+          type="button"
+          aria-expanded={mobileOpen}
+          aria-controls="mobile-navigation"
+          onClick={() => setMobileOpen((open) => !open)}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-semibold text-charcoal hover:bg-shell"
+        >
+          <span aria-hidden>☰</span>
+          <span className="truncate">{mobileCurrent?.label ?? (pathname.startsWith("/settings") ? "Settings" : "Backstage")}</span>
+        </button>
+        <label htmlFor="mobile-venue" className="sr-only">Viewing location</label>
         <select
+          id="mobile-venue"
+          aria-label="Viewing location"
           value={venue}
           onChange={(e) => setVenue(e.target.value as VenueSelection)}
           className="ml-auto rounded-md border border-cream-2 bg-white px-2 py-1.5 text-xs font-semibold text-charcoal"
@@ -242,6 +236,20 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
           <option value="prologue">Prologue</option>
         </select>
       </div>
+      {mobileOpen && (
+        <div id="mobile-navigation" className="fixed inset-x-0 bottom-0 top-[52px] z-20 overflow-y-auto bg-white px-4 py-4 shadow-xl lg:hidden">
+          <nav aria-label="Main navigation" className="grid grid-cols-2 gap-2">
+            {mobileLinks.map((item) => (
+              <Link key={item.href} href={item.href} className={`rounded-lg border px-3 py-3 text-sm font-semibold ${pathname.startsWith(item.href) ? "border-rust bg-shell text-rust" : "border-cream-2 text-charcoal"}`}>
+                {item.label}
+              </Link>
+            ))}
+            {(user?.permissions.includes("settings:manage") || user?.permissions.includes("team.manage")) && (
+              <Link href="/settings" className="rounded-lg border border-cream-2 px-3 py-3 text-sm font-semibold text-charcoal">Settings</Link>
+            )}
+          </nav>
+        </div>
+      )}
       <div className="h-[52px] lg:hidden" aria-hidden />
 
       {/* Desktop sidebar */}
@@ -307,6 +315,8 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
             return (
               <div key={g.key}>
                 <button
+                  aria-expanded={open}
+                  aria-controls={`nav-group-${g.key}`}
                   onClick={() => toggleGroup(g.key)}
                   className={`flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-[9px] text-sm transition-colors ${
                     inside && !open ? "bg-shell font-semibold text-rust" : "font-medium text-charcoal hover:bg-ink/5"
@@ -328,7 +338,7 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
                   </svg>
                 </button>
                 {open && (
-                  <div className="mb-1 ml-[22px] flex flex-col gap-0.5 border-l border-cream-2 pl-2 pt-0.5">
+                  <div id={`nav-group-${g.key}`} className="mb-1 ml-[22px] flex flex-col gap-0.5 border-l border-cream-2 pl-2 pt-0.5">
                     {g.children.map((c) => {
                       // Longest match wins (see mobile bar note).
                       const best = g.children
@@ -391,6 +401,7 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
         </nav>
 
         <div className="flex items-center gap-2.5 border-t border-cream-2 px-4 py-3.5">
+          {navCountsError && <span className="sr-only" role="status">Navigation counts could not be refreshed</span>}
           {user ? (
             <>
               <span className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-rust font-display text-[15px] text-cream">

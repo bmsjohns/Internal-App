@@ -370,6 +370,8 @@ export interface HubLine {
   title: string;
   isbn: string;
   quantity: number;
+  /** Copies physically received so partial deliveries and backorders remain visible. */
+  receivedQuantity: number;
   publisherId: string | null;
   imprint: string;
   rrp: number | null;
@@ -397,7 +399,7 @@ export interface HubLine {
 
 export type HubLineInput = Omit<
   HubLine,
-  "id" | "createdAt" | "sentAt" | "sentBy" | "sentMethod" | "sentCopy" | "arrivedAt" | "log" | "state"
+  "id" | "createdAt" | "sentAt" | "sentBy" | "sentMethod" | "sentCopy" | "arrivedAt" | "receivedQuantity" | "log" | "state"
 >;
 
 /** Per-order-type discount rates (straight % off RRP — no volume tiers, C6).

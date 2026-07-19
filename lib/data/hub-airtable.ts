@@ -64,6 +64,7 @@ const toLine = (r: any): HubLine => {
     title: f["Title"] ?? "",
     isbn: f["ISBN"] ?? "",
     quantity: Number(f["Quantity"] ?? 0),
+    receivedQuantity: Number(f["Received Quantity"] ?? (STATE_FROM(f["State"]) === "arrived" ? f["Quantity"] : 0)),
     publisherId: f["Publisher ID"] || null,
     imprint: f["Imprint"] ?? "",
     rrp: f["RRP"] != null ? Number(f["RRP"]) : null,
@@ -328,13 +329,29 @@ export const airtableHubDataSource: HubDataSource = {
   },
 
   async markArrived(lineIds, byName) {
+    const receipts = [];
+    for (const id of lineIds) {
+      const line = await this.getLine(id);
+      if (line?.state === "ordered") receipts.push({ lineId: id, quantity: line.quantity - line.receivedQuantity });
+    }
+    return this.receive(receipts, byName);
+  },
+
+  async receive(receipts, byName) {
     const baseId = await base();
     const now = new Date().toISOString();
     const out: HubLine[] = [];
-    for (const id of lineIds) {
-      const line = await this.getLine(id);
+    for (const receipt of receipts) {
+      const line = await this.getLine(receipt.lineId);
       if (!line || line.state !== "ordered") continue;
-      out.push(await patchLine(baseId, line, { State: STATE_TO.arrived, "Arrived At": now }, entry(byName, "Marked arrived")));
+      const received = Math.min(line.quantity, line.receivedQuantity + Math.max(1, Math.floor(receipt.quantity)));
+      const complete = received >= line.quantity;
+      out.push(await patchLine(
+        baseId,
+        line,
+        { "Received Quantity": received, ...(complete ? { State: STATE_TO.arrived, "Arrived At": now } : {}) },
+        entry(byName, complete ? `Delivery complete (${received}/${line.quantity})` : `Partial delivery (${received}/${line.quantity})`)
+      ));
     }
     return out;
   },

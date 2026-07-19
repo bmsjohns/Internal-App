@@ -14,9 +14,19 @@ export async function POST(req: NextRequest) {
   if (!can(user, "ordering.manage")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await req.json();
   const lineIds: string[] = Array.isArray(body?.lineIds) ? body.lineIds : [];
-  if (lineIds.length === 0) return NextResponse.json({ error: "lineIds is required" }, { status: 400 });
+  const receipts: { lineId: string; quantity: number }[] = Array.isArray(body?.receipts)
+    ? body.receipts.filter((item: any) => typeof item?.lineId === "string" && Number.isFinite(Number(item?.quantity)) && Number(item.quantity) > 0)
+      .map((item: any) => ({ lineId: item.lineId, quantity: Math.floor(Number(item.quantity)) }))
+    : [];
+  if (lineIds.length === 0 && receipts.length === 0) return NextResponse.json({ error: "lineIds or receipts is required" }, { status: 400 });
 
-  const arrived = await getHubDataSource().markArrived(lineIds, user.name);
+  const source = getHubDataSource();
+  const targets = await Promise.all((receipts.length ? receipts.map((item) => item.lineId) : lineIds).map((id) => source.getLine(id)));
+  if (targets.some((line) => !line || !line.account || !can(user, "ordering.manage", line.account))) {
+    return NextResponse.json({ error: "One or more lines are outside your location access" }, { status: 403 });
+  }
+  const received = receipts.length ? await source.receive(receipts, user.name) : await source.markArrived(lineIds, user.name);
+  const arrived = received.filter((line) => line.state === "arrived");
 
   // Write-back (C4). Book Club selections / event stock / school orders
   // simply REFLECT the hub line's state via their stored link — nothing to
@@ -46,5 +56,5 @@ export async function POST(req: NextRequest) {
       console.error(`Hub arrival write-back failed for ${line.source} ${line.sourceLink}`, e);
     }
   }
-  return NextResponse.json({ arrived: arrived.length, writeBack });
+  return NextResponse.json({ arrived: arrived.length, received: received.length, writeBack });
 }

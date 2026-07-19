@@ -64,7 +64,7 @@ export default function HostEditor({ initial, canEdit = true }: { initial?: Host
 
   async function remove() {
     if (!canEdit) return;
-    if (isNew || !confirm(`Delete “${draft.name}”? This cannot be undone.`)) return;
+    if (isNew || !(await confirmAction(`Delete “${draft.name}”? This cannot be undone.`, "Delete host"))) return;
     setBusy(true);
     setError("");
     try {
@@ -177,3 +177,4 @@ export default function HostEditor({ initial, canEdit = true }: { initial?: Host
     </div>
   );
 }
+import { confirmAction } from "@/lib/dialogs";

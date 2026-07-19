@@ -199,6 +199,13 @@ export const mockReturnsDataSource: ReturnsDataSource = {
     return store().requests.find((r) => r.id === id) ?? null;
   },
 
+  async uploadApproval(id, file) {
+    const r = get(id);
+    r.raFilename = file.filename;
+    r.log.push(entry("System", `Approval form uploaded (${file.filename})`));
+    return r;
+  },
+
   async createRequests(inputs, byName) {
     const s = store();
     const created = inputs.map((input) => {

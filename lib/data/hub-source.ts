@@ -46,7 +46,9 @@ export interface HubDataSource {
     sentCopy: string
   ): Promise<HubLine[]>;
 
-  /** Ordered → Arrived (terminal). Single confirm — NO partial receipts (C4). */
+  /** Receive copies. A line remains ordered until its full quantity arrives. */
+  receive(receipts: { lineId: string; quantity: number }[], byName: string): Promise<HubLine[]>;
+  /** Compatibility shortcut: receive every outstanding copy on each line. */
   markArrived(lineIds: string[], byName: string): Promise<HubLine[]>;
 
   // --- Publishers reference data (C6) — staff-maintained, never hardcoded ---

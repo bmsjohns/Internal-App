@@ -45,6 +45,7 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
   const [overlay, setOverlay] = useState<OverlayKind>(null);
   const [raNumber, setRaNumber] = useState("");
   const [raFilename, setRaFilename] = useState("");
+  const [raFile, setRaFile] = useState<File | null>(null);
   const [creditAmount, setCreditAmount] = useState("");
   const [pickScan, setPickScan] = useState("");
   const [pickQty, setPickQty] = useState(1);
@@ -287,6 +288,7 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
                   onChange={(e) => setPickScan(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), doPick(pickScan))}
                   placeholder="Scan a barcode to confirm it's picked"
+                  aria-label="Scan a barcode to confirm it is picked"
                   className="w-full rounded-lg border-[1.5px] bg-white py-3 pl-10 pr-3 text-[15px] text-ink"
                   style={{ borderColor: accent }}
                   inputMode="numeric"
@@ -469,6 +471,7 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
               value={raNumber}
               onChange={(e) => setRaNumber(e.target.value)}
               placeholder={gardners ? "e.g. GDN-2026-0000" : "e.g. PUB-RA-00000"}
+              aria-label={gardners ? "Gardners authorisation reference" : "Return authorisation number"}
               className={field}
               autoFocus
             />
@@ -477,10 +480,20 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
               type="file"
               accept=".pdf,image/*"
               className="hidden"
-              onChange={(e) => setRaFilename(e.target.files?.[0]?.name ?? "")}
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setRaFile(file);
+                setRaFilename(file?.name ?? "");
+              }}
             />
             <button
-              onClick={() => (raFilename ? setRaFilename("") : fileRef.current?.click())}
+              onClick={() => {
+                if (raFilename) {
+                  setRaFile(null);
+                  setRaFilename("");
+                  if (fileRef.current) fileRef.current.value = "";
+                } else fileRef.current?.click();
+              }}
               className="mt-3 inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border-[1.5px] border-cream-2 bg-transparent px-3.5 py-2.5 text-[13px] font-semibold text-charcoal hover:border-ink"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -496,11 +509,28 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
                     showToast("Enter the RA number");
                     return;
                   }
+                  if (raFile) {
+                    setBusy(true);
+                    try {
+                      const form = new FormData();
+                      form.append("file", raFile);
+                      const uploaded = await fetch(`/api/returns/${r.id}/attachment`, { method: "POST", body: form });
+                      if (!uploaded.ok) throw new Error((await uploaded.json()).error ?? "Couldn’t upload approval form");
+                    } catch (e) {
+                      showToast(e instanceof Error ? e.message : "Couldn’t upload approval form");
+                      setBusy(false);
+                      return;
+                    }
+                    setBusy(false);
+                  }
                   const ok = await act(
                     { action: "approve", id: r.id, raNumber, raFilename },
                     `${r.code} approved — ready to pick`
                   );
-                  if (ok) setOverlay(null);
+                  if (ok) {
+                    setRaFile(null);
+                    setOverlay(null);
+                  }
                 }}
                 disabled={busy}
               >
@@ -526,6 +556,7 @@ export default function ReturnDetailPage({ params }: { params: Promise<{ id: str
                 value={creditAmount}
                 onChange={(e) => setCreditAmount(e.target.value.replace(/[^0-9.]/g, ""))}
                 placeholder="0.00"
+                aria-label="Confirmed credit amount"
                 className={`${field} pl-7 tabular-nums`}
                 inputMode="decimal"
                 autoFocus

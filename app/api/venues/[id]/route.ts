@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEventsDataSource } from "@/lib/data/events";
-import { can, getSessionUser } from "@/lib/auth";
+import { can, getSessionUser, isAdmin } from "@/lib/auth";
 import { parseVenueBody } from "@/lib/events-api";
 import type { VenueInput } from "@/lib/types";
 
@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "events:edit")) {
+  if (!isAdmin(user)) {
     return NextResponse.json({ error: "No events edit access" }, { status: 403 });
   }
   const body = await req.json();
@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "events:edit")) {
+  if (!isAdmin(user)) {
     return NextResponse.json({ error: "No events edit access" }, { status: 403 });
   }
   const ds = getEventsDataSource();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { confirmAction } from "@/lib/dialogs";
 import { useRouter } from "next/navigation";
 import { btnDanger } from "./PageHeader";
 
@@ -9,7 +10,7 @@ export default function DeleteOrderButton({ orderId, bookTitle }: { orderId: str
   const [busy, setBusy] = useState(false);
 
   async function remove() {
-    if (!confirm(`Delete the order for “${bookTitle}”? This can’t be undone.`)) return;
+    if (!(await confirmAction(`Delete the order for “${bookTitle}”? This can’t be undone.`, "Delete order"))) return;
     setBusy(true);
     const res = await fetch(`/api/orders/${orderId}`, { method: "DELETE" });
     if (res.ok) {

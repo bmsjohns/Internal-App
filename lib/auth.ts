@@ -97,8 +97,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       : "admin";
     return buildSession({
       id: "dev-user",
-      name: process.env.DEV_AUTH_NAME ?? "Ben Johns",
-      email: "ben@prologuebooks.co.uk",
+      name: process.env.DEV_AUTH_NAME ?? "Development Admin",
+      email: process.env.DEV_AUTH_EMAIL ?? "admin@example.test",
       role,
       locations: [...LOCATIONS],
       overrides: [],

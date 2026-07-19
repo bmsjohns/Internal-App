@@ -202,6 +202,7 @@ export default function DataTable<T>({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
             className="w-full rounded-md border border-cream-2 bg-white py-2.5 pl-9 pr-3 text-sm text-ink"
           />
         </div>

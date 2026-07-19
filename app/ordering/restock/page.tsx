@@ -169,6 +169,7 @@ export default function RestockPage() {
               }}
               onKeyDown={(e) => e.key === "Enter" && add()}
               placeholder="Scan barcode or type ISBN / title"
+              aria-label="Scan barcode or type ISBN or title"
               className="w-full rounded-lg border-[1.5px] bg-white py-3 pl-10 pr-3 text-[15px] text-ink"
               style={{ borderColor: accent }}
             />

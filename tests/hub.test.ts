@@ -31,6 +31,7 @@ const line = (over: Partial<HubLine> = {}): HubLine => ({
   title: "Orbital",
   isbn: "9781529922936",
   quantity: 10,
+  receivedQuantity: 0,
   publisherId: "p1",
   imprint: "Vintage",
   rrp: 10,

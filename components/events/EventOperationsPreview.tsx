@@ -211,7 +211,7 @@ export function EventTicketsTab({ initial, backstageEventId, canEdit }: { initia
       setMessage("Paste the Luma event URL first.");
       return;
     }
-    if (action === "create" && !window.confirm("Create a private, registration-closed draft in Luma? Nothing will be published or put on sale.")) return;
+    if (action === "create" && !(await confirmAction("Create a private, registration-closed draft in Luma? Nothing will be published or put on sale.", "Create Luma draft"))) return;
     setSyncing(true);
     setMessage("");
     try {
@@ -481,3 +481,4 @@ function formatLongDate(iso: string) { return iso ? new Date(`${iso}T12:00:00`).
 function relativeTime(iso: string) { if (!iso) return "never"; const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000)); return mins < 1 ? "just now" : `${mins} min ago`; }
 function money(value: number) { return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(value); }
 function safeNumber(value: unknown) { const parsed = typeof value === "number" ? value : Number(value); return Number.isFinite(parsed) ? parsed : 0; }
+import { confirmAction } from "@/lib/dialogs";

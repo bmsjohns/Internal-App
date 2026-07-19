@@ -435,6 +435,8 @@ Outstanding / Restock / Publishers, with live badge counts
   central ordering table Ben chose over per-module order tables. Applied
   schema changes (all additive), live-base mapping quirks and remaining
   rollout steps: [docs/clubs-hub-migration.md](docs/clubs-hub-migration.md).
+  Partial receiving additionally requires a numeric **Received Quantity**
+  field on Hub Lines; it defaults to zero and is incremented by Backstage.
   ⚠️ Still needed: the Book Clubs base on the app token's access list, and
   the Stripe keys (Ben, in progress).
 - **Members are standalone** from Customers (spec B1) — no linking or
@@ -467,10 +469,10 @@ Outstanding / Restock / Publishers, with live badge counts
   sent the same way. Sending is refused while the matching account number
   is missing. The email path opens **Gmail compose** in a new tab (the team
   sends from personal Gmail accounts) with the reviewed body pre-filled.
-  Arrival is a single confirm (no partial receipts), writes back to customer
-  orders ("Already In Stock" + status log) and to Book Orders ("Publisher
-  Contacted" on send, "Received" on arrival) via the preserved source link,
-  and Outstanding lists what to chase, sortable by days out.
+  Receiving records the number of copies in each delivery. Part-delivered
+  lines remain outstanding with a received/ordered count; only the final
+  receipt writes back to customer orders ("Already In Stock" + status log)
+  and Book Orders ("Received") via the preserved source link.
 - **Restock** (spec C5) is decision-support only: phone-first capture bar
   (barcode → ISBN lookup autofills title, publisher suggests the
   supplier), grouped by supplier with the Settings cadence badge, "mark
@@ -563,10 +565,9 @@ them in the roles editor.
   [attachment], Requested By, Date Requested/Submitted/Approved/Shipped/
   Credit Confirmed [dates], Credit Amount [currency], Notes, Log) and
   **"Return Lines"** (Request ID, Title, ISBN, Quantity, Reason,
-  Condition, RRP, Picked). Note: the RA form's **binary upload** into the
-  attachment field isn't wired yet (Airtable needs a public URL or the
-  content-upload endpoint) — the filename is recorded and the field is
-  ready; flagged rather than silently faked.
+  Condition, RRP, Picked). Approval forms are uploaded directly through
+  Airtable's content API (5MB maximum; PDF/JPG/PNG/WebP/HEIC), and the
+  filename is stored alongside the real attachment for reliable display.
 - **Publishers table**: no new fields strictly needed — rep name/email are
   reused as the chase contact. If a publisher's **returns contact** ever
   differs from the ordering rep (spec's open question), add optional

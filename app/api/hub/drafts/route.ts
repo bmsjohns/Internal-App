@@ -8,7 +8,7 @@ import { LOCATIONS } from "@/lib/types";
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "hub:view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!can(user, "ordering.manage")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await req.json();
   const hub = getHubDataSource();
   try {
@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
         if (!body.draftKey || !LOCATIONS.includes(body.account)) {
           return NextResponse.json({ error: "draftKey and a valid account are required" }, { status: 400 });
         }
+        if (!can(user, "ordering.manage", body.account)) return NextResponse.json({ error: "No access at this location" }, { status: 403 });
         await hub.setDraftAccount(body.draftKey, body.account, user.name);
         return NextResponse.json({ ok: true });
       }

@@ -10,9 +10,6 @@ import { getHubDataSource } from "@/lib/data/hub";
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "clubs:manage")) {
-    return NextResponse.json({ error: "Setting a monthly pick needs the clubs:manage permission" }, { status: 403 });
-  }
   const body = await req.json();
   const { clubId, month, title, isbn } = body ?? {};
   if (!clubId || !month || !title?.trim()) {
@@ -22,6 +19,7 @@ export async function POST(req: NextRequest) {
   const hub = getHubDataSource();
   const club = await clubsSrc.getClub(clubId);
   if (!club) return NextResponse.json({ error: "Club not found" }, { status: 404 });
+  if (!can(user, "clubs.manage", club.location)) return NextResponse.json({ error: "No club management access at this location" }, { status: 403 });
 
   const memberships = await clubsSrc.listMemberships();
   const activeCount = memberships.filter((s) => s.clubId === clubId && s.status === "active").length;

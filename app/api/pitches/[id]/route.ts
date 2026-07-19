@@ -16,6 +16,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
   const pitch = await getEventsDataSource().getPitch(id);
   if (!pitch) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (pitch.location && !can(user, "events.pitching.view", pitch.location)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   return NextResponse.json({ pitch });
 }
 
@@ -42,6 +43,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const ds = getEventsDataSource();
   const existing = await ds.getPitch(id);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (existing.location && !can(user, "events.pitching.manage", existing.location)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (body.location && !can(user, "events.pitching.manage", body.location)) return NextResponse.json({ error: "No access at the destination location" }, { status: 403 });
   // Publisher is read-only in Phase 1 — derived via Imprint once Phase 0 lands.
   delete body.publisherIds;
   delete body.publisherNames;
@@ -59,6 +62,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const ds = getEventsDataSource();
   const pitch = await ds.getPitch(id);
   if (!pitch) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (pitch.location && !can(user, "events.pitching.delete", pitch.location)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   await ds.deletePitch(id);
   return NextResponse.json({ ok: true });
 }

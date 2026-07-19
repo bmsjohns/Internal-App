@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { Location, Order, Supplier } from "@/lib/types";
+import { fetchJson } from "@/lib/fetch-json";
 import {
   canonicalStatus,
   CANONICAL_STATUSES,
@@ -100,11 +101,11 @@ export default function OrderForm({
       : emptyDraft(venue === "prologue" ? "Prologue" : "Simply Books")
   );
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierError, setSupplierError] = useState("");
   useEffect(() => {
-    fetch("/api/suppliers")
-      .then((r) => r.json())
-      .then((d) => setSuppliers(d.suppliers ?? []))
-      .catch(() => {});
+    fetchJson<{ suppliers: Supplier[] }>("/api/suppliers")
+      .then((d) => setSuppliers(d.suppliers))
+      .catch((e) => setSupplierError(e instanceof Error ? e.message : "Couldn’t load suppliers"));
   }, []);
   const [picked, setPicked] = useState<PickedCustomer>(customer ?? null);
   const [added, setAdded] = useState<Order[]>([]);
@@ -328,6 +329,7 @@ export default function OrderForm({
                 </option>
               ))}
             </select>
+            {supplierError && <p className="mb-0 mt-1 text-xs text-coral">Supplier list unavailable: {supplierError}</p>}
           </div>
           <div>
             <label className={labelCls} htmlFor="paid">

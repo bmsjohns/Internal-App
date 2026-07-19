@@ -145,23 +145,22 @@ the app never writes unmatched names.
 
 1. Create a Clerk app (clerk.com, free tier: 10k MAU — the team fits easily).
 2. Put `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` in Vercel env.
-3. Invite staff from the Clerk dashboard (no self-serve signup, no redeploy).
-4. Per user, set **public metadata** in the dashboard:
-   - staff: `{ "role": "staff" }` (or leave empty — staff is the default)
-   - venue-scoped manager: `{ "role": "manager", "managerLocations": ["Prologue"] }`
-   - joint manager: `{ "role": "manager", "managerLocations": "all" }`
+3. Set `PERMISSIONS_BOOTSTRAP_ADMIN_EMAILS` for the first Admin deploy.
+4. From then on, invite and manage staff inside **Settings → Team &
+   Permissions**. Roles, location scope and individual grant/revoke overrides
+   are written to Clerk metadata by the app and take effect immediately.
+
+The shared role bundles and access audit live in the existing Backstage base;
+see [docs/permissioning-migration.md](docs/permissioning-migration.md) for the
+two-table migration and bootstrap runbook. Old `role`, `managerLocations` and
+`permissions` metadata is read during the transition.
 
 If Clerk is not configured, production now fails closed with HTTP 503 for
 pages and APIs. `DEV_AUTH_BYPASS=1` is accepted only outside production.
 
-**Conscious deviations to flag (spec §5):** (a) using a managed auth provider
-reverses the earlier "no third-party auth" decision — cost stays £0 but adds
-one third-party account holding staff emails; (b) roles live in Clerk
-`publicMetadata` rather than Clerk Organizations custom roles, because custom
-org roles/permissions are a **paid** Clerk add-on and the target cost is
-"effectively free". Permissions are still centrally managed in the Clerk
-dashboard, and module-specific permission strings (e.g. `events:delete`) can
-be added to the same metadata shape when the Events module lands.
+Clerk Organizations custom roles remain unnecessary (and paid): identities and
+per-person access live in Clerk metadata, while editable shared role definitions
+use the app's existing Airtable data layer.
 
 ## Deployment (Vercel)
 
@@ -244,13 +243,9 @@ visuals were adopted; the data model follows the spec (real statuses,
 imprint-primary). Cards move by **drag-and-drop** (per the design); on touch,
 the stage select on the editor's Pipeline panel does the same write.
 
-**Access** is deliberately narrow (spec §1): `pitching:view` / `pitching:edit`
-/ `pitching:delete` are granted per-person via Clerk `publicMetadata`
-`permissions`, NOT by role. Nobody gets them by default. ⚠️ Override
-semantics: an explicit `permissions` list replaces role defaults, so a
-manager in the pitching group needs
-`{ "permissions": ["settings:manage", "pitching:view", "pitching:edit", "pitching:delete"] }`.
-**Ben: name the group** and set that in the Clerk dashboard per user.
+**Access** is deliberately narrow (spec §1): the Events Lead role includes the
+pitching pipeline; Managers do not receive it by default. An Admin can grant or
+revoke the three pitching actions for either location from the person's profile.
 
 **Status model** (lib/pitching.ts): the live table's 13 Status options fold
 into 8 board columns; writes only ever use existing Airtable option strings
@@ -466,7 +461,7 @@ Outstanding / Restock / Publishers, with live badge counts
   (`STALE_DRAFT_DAYS`, TBC with Ben). Deleting a draft is logged and never
   touches the originating record. The pending queue auto-batches by
   **publisher × account** (sources merge within a pairing — the point of
-  the hub); **send is gated by `hub:send`** and shown locked, not hidden,
+  the hub); **send is gated by the standalone `ordering.send` permission** and shown locked, not hidden,
   to everyone else. Email path opens the user's mail app with the reviewed
   body and stores that exact copy against the batch; CSV download marks
   sent the same way. Sending is refused while the matching account number
@@ -486,11 +481,11 @@ Outstanding / Restock / Publishers, with live badge counts
   override highlighted in the Publishers screen, imprints always inherit.
   Stored on the **existing Publishers table in the Events base** (rep
   contacts reused, not duplicated) — staff-editable behind
-  `settings:manage`, never hardcoded.
-- **Permissions** (spec C7): `hub:view` default for all roles (staging,
-  arrivals, restock stay friction-free), `hub:send` manager-default,
-  `clubs:view`/`clubs:manage` **explicit-grant only** for now — open
-  question on CRM visibility flagged for Ben in the migration doc.
+  `settings.suppliers.manage`, never hardcoded.
+- **Permissions** (spec C7): every action is evaluated as a permission ×
+  location tuple. Sending orders and Stripe subscription changes are separate
+  sensitive permissions; Book Club Manager receives club/Stripe access plus
+  staging and receiving, but order sending remains an explicit override.
 - **Venue tinting**: the whole surface re-tints to the venue being viewed
   (teal for Simply Books, terracotta otherwise), matching the design file.
 
@@ -501,12 +496,16 @@ Built from `returns-module-spec.md` + the Claude Design file
 Airtable process with one shared queue: **request → approval (RA) →
 shipping & credit**. Sits in the sidebar as its own group — *Returns* →
 **To be returned** (staging) / **Pick lists** / **Outstanding** — with live
-badge counts, under its own **`returns:view`** permission (Ben, 19 Jul):
-default-on for both roles like `hub:view`, but a separate string so access
-can be tailored per person. ⚠️ Clerk override semantics apply — any user
-with an explicit `permissions` array in publicMetadata (including Ben)
-needs `"returns:view"` added to it by hand, or the module disappears for
-them.
+badge counts, under its own **Returns module permissions** (Ben, 19 Jul)
+in the in-app roles system: `returns.view` (see the queue) and
+`returns.manage` (every lifecycle action), with `returns:view` kept as a
+legacy alias. Defaults: Admin + Manager get both (part of their
+everything bundles); **Events Lead** gets both too, since they verify
+post-event returns; Bar/Floor Staff and Book Club Manager get neither —
+tick them on per role or per person in Settings → Team. ⚠️ If a role's
+bundle was already saved to the "Permission Roles" table before this
+landed, the stored list won't include the new Returns keys — re-tick
+them in the roles editor.
 
 - **New return** (`/returns/new`) is scanner-first: barcode/ISBN → the
   Orders lookup fills title, cover and publisher (imprints resolve to the

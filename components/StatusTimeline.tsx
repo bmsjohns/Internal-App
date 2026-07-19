@@ -29,11 +29,15 @@ export default function StatusTimeline({
   rawStatus,
   lastModified,
   log,
+  supplier,
+  readOnly = false,
 }: {
   orderId: string;
   rawStatus: string;
   lastModified: string;
   log: StatusLogEntry[];
+  supplier: string;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -42,7 +46,7 @@ export default function StatusTimeline({
   const stageIdx = STAGES.findIndex((s) => s.keys.includes(currentKey));
 
   async function setStatus(key: string) {
-    if (key === currentKey || busy) return;
+    if (readOnly || key === currentKey || busy) return;
     setBusy(true);
     setError("");
     const writeAs = CANONICAL_STATUSES.find((s) => s.key === key)!.writeAs;
@@ -62,13 +66,14 @@ export default function StatusTimeline({
 
   const pill = (key: string, active: boolean, done: boolean) => {
     const s = CANONICAL_STATUSES.find((x) => x.key === key)!;
+    const supplierRequired = key === "ordered" && !supplier.trim();
     return (
       <button
         key={key}
         onClick={() => setStatus(key)}
-        disabled={busy}
-        title={active ? "Current status" : `Move to ${s.label}`}
-        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
+        disabled={readOnly || busy || supplierRequired}
+        title={readOnly ? "View only" : supplierRequired ? "Assign a supplier before marking this order as ordered" : active ? "Current status" : `Move to ${s.label}`}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-colors disabled:opacity-60 ${readOnly ? "cursor-default" : "cursor-pointer"} ${
           active ? "" : "hover:border-ink"
         }`}
         style={

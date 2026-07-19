@@ -11,7 +11,7 @@ import { getDataSource } from "@/lib/data";
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "hub:view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!can(user, "ordering.manage")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await req.json();
   const lineIds: string[] = Array.isArray(body?.lineIds) ? body.lineIds : [];
   if (lineIds.length === 0) return NextResponse.json({ error: "lineIds is required" }, { status: 400 });

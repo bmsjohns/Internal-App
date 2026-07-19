@@ -1,129 +1,130 @@
-import type { Location, Role, SessionUser } from "@/lib/types";
+import type { Location, SessionUser } from "@/lib/types";
 import { LOCATIONS } from "@/lib/types";
+import { clerkEnabled } from "@/lib/auth-config-runtime";
+import { getRoleDefinitions } from "@/lib/data/permissions-store";
+import {
+  LEGACY_PERMISSION_MAP,
+  hasPermission,
+  permissionKey,
+  roleById,
+  type PermissionOverride,
+  type RoleId,
+} from "@/lib/permissions";
+import { accessFromMetadata } from "@/lib/team-directory";
 
-export const clerkEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+export { clerkEnabled };
 
-// Explicit local-dev escape hatch so the app can run without a Clerk account.
-// Refuses to activate in production builds.
-const devBypass = () =>
-  process.env.DEV_AUTH_BYPASS === "1" && process.env.NODE_ENV !== "production";
+const devBypass = () => process.env.DEV_AUTH_BYPASS === "1" && process.env.NODE_ENV !== "production";
 
-// Default permission grants per role. Explicit `permissions` in Clerk
-// publicMetadata override these, so e.g. settings:manage can later be given
-// to a non-manager (or taken from a venue manager) without code changes.
-const ROLE_PERMISSIONS: Record<Role, string[]> = {
-  staff: ["callsheet:view", "hub:view", "returns:view"],
-  manager: ["settings:manage", "callsheet:view", "hub:view", "hub:send", "returns:view"],
-};
-
-// Events Phase 1: pitching is deliberately NOT granted by any role — access
-// is restricted to a small group Ben names, via explicit `permissions` in
-// Clerk publicMetadata (same add/remove-in-dashboard mechanism as the rest
-// of the app). NOTE the override semantics above: listing `permissions` for
-// a manager replaces their defaults, so include "settings:manage" too, e.g.
-//   { "role": "manager", "permissions": ["settings:manage", "pitching:view",
-//     "pitching:edit", "pitching:delete"] }
 export const PITCHING_PERMISSIONS = ["pitching:view", "pitching:edit", "pitching:delete"];
-
-// Events Phase 2: three access tiers (spec §1/§6.2).
-//  - events:view / events:edit — the Events module proper (list, detail,
-//    venues, hosts). Granted explicitly like pitching for now; likely a
-//    broader group than pitching since running a live event involves more
-//    people day-to-day. CONFIRM WITH BEN whether this should instead default
-//    on for all staff (README §Events).
-//  - callsheet:view — the day-of tier: ONLY the standalone call sheet page
-//    for events you're staffed on. Deliberately its own, narrower permission
-//    (not a subset check on events:view) and granted to every role by
-//    default, so the whole on-the-day team can open their call sheet without
-//    being let into the rest of the module.
 export const EVENTS_PERMISSIONS = ["events:view", "events:edit"];
 export const CALLSHEET_PERMISSION = "callsheet:view";
-
-// Book Clubs + Ordering Hub (combined spec, Jul 2026):
-//  - hub:view — the Ordering Hub: staging + inline edits, the pending queue,
-//    marking arrived, restock capture. Spec C7 wants all of that friction-free
-//    for general staff, so BOTH roles get it by default.
-//  - hub:send — actually sending a batch (email or CSV). Restricted (C7);
-//    manager default, grantable per-person. The UI shows send controls as
-//    permission-locked rather than hiding them, so staff understand.
-//  - clubs:view / clubs:manage — member CRM incl. payment standing, and the
-//    Stripe write actions + monthly picks respectively. NOT granted by any
-//    role default for now: the spec's open question (Part D) is whether
-//    payment-adjacent member data should be visible to the same broad group
-//    as Orders — until Ben decides, access is explicit-grant like pitching.
 export const HUB_PERMISSIONS = ["hub:view", "hub:send"];
 export const CLUBS_PERMISSIONS = ["clubs:view", "clubs:manage"];
-
-// Returns module (Ben, 19 Jul 2026: "Returns should get its own
-// permissions"): returns:view covers the whole module — staging, pick
-// lists, outstanding, all lifecycle actions. Default-on for both roles
-// (same friction-free ethos as hub:view) but its own string, so access can
-// be tailored per person via explicit `permissions` in Clerk metadata.
-// ⚠️ Remember the override semantics above: any user with an EXPLICIT
-// permissions array (including Ben) must have "returns:view" added to it
-// by hand — role defaults don't apply to them.
+// Returns (Ben, 19 Jul 2026): its own module permissions — catalog keys
+// returns.view / returns.manage in lib/permissions.ts; "returns:view" is
+// the legacy alias.
 export const RETURNS_PERMISSIONS = ["returns:view"];
 
-/**
- * Resolve the current user, from Clerk when configured.
- *
- * Roles, venue scoping and permissions live in Clerk `publicMetadata`, set
- * per-user in the Clerk dashboard (no redeploy needed):
- *   { "role": "manager", "managerLocations": ["Prologue"] }        — venue-scoped manager
- *   { "role": "manager", "managerLocations": "all" }               — joint manager
- *   { "role": "staff" }                                            — staff (default)
- *   { "role": "staff", "permissions": ["settings:manage"] }        — explicit grant
- *
- * NOTE: Clerk's built-in custom org roles/permissions are a paid add-on, so to
- * keep the target cost at zero we model roles in publicMetadata instead — still
- * centrally managed in the Clerk dashboard. See README §Auth.
- */
+function bootstrapAdmin(email: string): boolean {
+  const configured = (process.env.PERMISSIONS_BOOTSTRAP_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return configured.includes(email.toLowerCase());
+}
+
+function compatibilityPermissions(rolePermissions: string[], overrides: PermissionOverride[], locations: Location[]): string[] {
+  const effective = new Set<string>();
+  for (const permission of rolePermissions) {
+    if (locations.some((location) => !overrides.some((o) => o.permission === permission && o.location === location && o.effect === "revoke"))) {
+      effective.add(permission);
+    }
+  }
+  for (const override of overrides) if (override.effect === "grant" && locations.includes(override.location)) effective.add(override.permission);
+  for (const [legacy, modern] of Object.entries(LEGACY_PERMISSION_MAP)) if (effective.has(modern)) effective.add(legacy);
+  return [...effective];
+}
+
+async function buildSession(input: {
+  id: string;
+  name: string;
+  email: string;
+  role: RoleId;
+  locations: Location[];
+  overrides: PermissionOverride[];
+}): Promise<SessionUser> {
+  const roles = await getRoleDefinitions();
+  const role = roleById(roles, input.role);
+  const locations = input.role === "admin" ? [...LOCATIONS] : input.locations;
+  return {
+    id: input.id,
+    name: input.name,
+    email: input.email,
+    role: input.role,
+    locations,
+    managerLocations: locations.length === LOCATIONS.length ? "all" : locations,
+    rolePermissions: role.permissions,
+    permissionOverrides: input.overrides,
+    permissions: compatibilityPermissions(role.permissions, input.overrides, locations),
+  };
+}
+
+/** Resolve the current identity and its effective role inputs on every request.
+ * Clerk metadata updates therefore take effect after router.refresh(), without
+ * ending the person's session. */
 export async function getSessionUser(): Promise<SessionUser | null> {
   if (clerkEnabled) {
     const { currentUser } = await import("@clerk/nextjs/server");
-    const u = await currentUser();
-    if (!u) return null;
-    const meta = (u.publicMetadata ?? {}) as {
-      role?: Role;
-      managerLocations?: Location[] | "all";
-      permissions?: string[];
-    };
-    const role: Role = meta.role === "manager" ? "manager" : "staff";
-    return {
-      id: u.id,
-      name: u.firstName ? `${u.firstName}${u.lastName ? " " + u.lastName : ""}` : (u.username ?? "Unknown"),
+    const user = await currentUser();
+    if (!user) return null;
+    const email = user.primaryEmailAddress?.emailAddress ?? user.emailAddresses[0]?.emailAddress ?? "";
+    const access = accessFromMetadata((user.publicMetadata ?? {}) as any);
+    const role: RoleId = bootstrapAdmin(email) ? "admin" : access.role;
+    return buildSession({
+      id: user.id,
+      name: user.firstName ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}` : (user.username ?? "Unknown"),
+      email,
       role,
-      managerLocations: role === "manager" ? (meta.managerLocations ?? "all") : [],
-      permissions: meta.permissions ?? ROLE_PERMISSIONS[role],
-    };
+      locations: role === "admin" ? [...LOCATIONS] : access.locations,
+      overrides: access.overrides,
+    });
   }
   if (devBypass()) {
-    const role = (process.env.DEV_AUTH_ROLE as Role) ?? "manager";
-    return {
+    const requested = process.env.DEV_AUTH_ROLE as RoleId | undefined;
+    const role: RoleId = requested && ["admin", "manager", "events-lead", "bar-floor-staff", "book-club-manager"].includes(requested)
+      ? requested
+      : "admin";
+    return buildSession({
       id: "dev-user",
-      name: process.env.DEV_AUTH_NAME ?? "Ben",
+      name: process.env.DEV_AUTH_NAME ?? "Ben Johns",
+      email: "ben@prologuebooks.co.uk",
       role,
-      managerLocations: role === "manager" ? "all" : [],
-      // Dev user gets pitching + events + clubs access so every module is
-      // reachable locally (hub:view/hub:send already come from the role).
-      permissions: [...ROLE_PERMISSIONS[role], ...PITCHING_PERMISSIONS, ...EVENTS_PERMISSIONS, ...CLUBS_PERMISSIONS],
-    };
+      locations: [...LOCATIONS],
+      overrides: [],
+    });
   }
   return null;
 }
 
-/** Permission check (V3 §3): prefer this over raw role checks for features. */
-export function can(user: SessionUser, permission: string): boolean {
-  return user.permissions.includes(permission);
+/** Location-aware permission check. Omitting location asks whether the user
+ * can perform the action at at least one location (useful for navigation). */
+export function can(user: SessionUser, permission: string, location?: Location): boolean {
+  return hasPermission(user, permission, location);
 }
 
-/** Can this user delete an order at the given venue? (spec §11a.4) */
 export function canDeleteAt(user: SessionUser, location: Location): boolean {
-  if (user.role !== "manager") return false;
-  return user.managerLocations === "all" || user.managerLocations.includes(location);
+  return can(user, "orders.delete", location);
 }
 
 export function managedLocations(user: SessionUser): Location[] {
-  if (user.role !== "manager") return [];
-  return user.managerLocations === "all" ? LOCATIONS : user.managerLocations;
+  return LOCATIONS.filter((location) => can(user, "orders.manage", location));
+}
+
+export function isAdmin(user: SessionUser): boolean {
+  return user.role === "admin" && can(user, "team.manage") && can(user, "roles.manage");
+}
+
+export function normalisePermission(value: string) {
+  return permissionKey(value);
 }

@@ -67,7 +67,7 @@ describe("Airtable rate-limit defences", () => {
   });
 
   it("scopes the orders list to open + recent records, but not customers", async () => {
-    const fetchMock = vi.fn(async () => ok({ records: [] }));
+    const fetchMock = vi.fn<(url: string) => Promise<Response>>(async () => ok({ records: [] }));
     vi.stubGlobal("fetch", fetchMock);
 
     await airtableDataSource.listOrders();
@@ -99,7 +99,7 @@ describe("Airtable rate-limit defences", () => {
   });
 
   it("searches the full history with an escaped Airtable formula", async () => {
-    const fetchMock = vi.fn(async () => ok({ records: [record] }));
+    const fetchMock = vi.fn<(url: string) => Promise<Response>>(async () => ok({ records: [record] }));
     vi.stubGlobal("fetch", fetchMock);
 
     const orders = await airtableDataSource.searchOrders('the "dune" saga');
@@ -113,7 +113,7 @@ describe("Airtable rate-limit defences", () => {
   });
 
   it("fetches orders by id in chunks of 50", async () => {
-    const fetchMock = vi.fn(async () => ok({ records: [record] }));
+    const fetchMock = vi.fn<(url: string) => Promise<Response>>(async () => ok({ records: [record] }));
     vi.stubGlobal("fetch", fetchMock);
 
     const ids = Array.from({ length: 60 }, (_, i) => `rec${i}`);

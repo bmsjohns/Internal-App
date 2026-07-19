@@ -10,7 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: "No events access" }, { status: 403 });
   }
   const hosts = await getEventsDataSource().listHosts();
-  return NextResponse.json({ hosts });
+  return NextResponse.json({ hosts, canEdit: can(user, "events:edit") });
 }
 
 export async function POST(req: NextRequest) {

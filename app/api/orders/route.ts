@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDataSource } from "@/lib/data";
-import { getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 import { matchTeamMember, DEFAULT_LOCATION, TEAM_MEMBER_OPTIONS } from "@/lib/config";
-import type { OrderInput } from "@/lib/types";
+import { LOCATIONS, type OrderInput } from "@/lib/types";
 
 export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(user, "orders.view")) return NextResponse.json({ error: "No orders access" }, { status: 403 });
 
   const ds = getDataSource();
   const [orders, customers] = await Promise.all([ds.listOrders(), ds.listCustomers()]);
   const byId = new Map(customers.map((c) => [c.id, c]));
   const joined = orders
+    .filter((order) => can(user, "orders.view", order.location))
     .map((o) => {
       const c = byId.get(o.customerIds[0]);
       return { ...o, customerName: o.customerName ?? c?.name, customerPhone: o.customerPhone ?? c?.phone };
@@ -25,6 +27,8 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
+  const location = LOCATIONS.includes(body.location) ? body.location : DEFAULT_LOCATION;
+  if (!can(user, "orders.manage", location)) return NextResponse.json({ error: "No order editing access at this location" }, { status: 403 });
   if (!body.bookTitle?.trim()) {
     return NextResponse.json({ error: "Book title is required" }, { status: 400 });
   }
@@ -57,7 +61,7 @@ export async function POST(req: NextRequest) {
     preorderPublicationDate: body.isPreorder ? (body.preorderPublicationDate || null) : null,
     estimatedLeadTime: body.estimatedLeadTime || null,
     deliveryMethod: body.deliveryMethod ?? "Collection",
-    location: body.location ?? DEFAULT_LOCATION,
+    location,
     notes: body.notes ?? "",
   };
 

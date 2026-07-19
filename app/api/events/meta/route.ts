@@ -16,7 +16,7 @@ export async function GET() {
   const [staff, venues, hosts] = await Promise.all([getStaffDirectory(), ds.listVenuesFull(), ds.listHosts()]);
   return NextResponse.json({
     me: { id: user.id, name: user.name },
-    canEdit: can(user, "events:edit"),
+    canEdit: can(user, "events.manage"),
     staff,
     venues: venues.map((v) => ({ id: v.id, name: v.name, capacity: v.capacity, locations: v.locations })),
     hosts: hosts.map((h) => ({ id: h.id, name: h.name, fee: h.fee, phone: h.phone })),

@@ -22,6 +22,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const ds = getEventsDataSource();
   const event = await ds.getEvent((await params).id);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (event.location && !can(user, "events.callsheet.view", event.location) && !can(user, "events.view", event.location)) return NextResponse.json({ error: "No call sheet access at this location" }, { status: 403 });
 
   // callsheet:view sees call sheets for events they're staffed on (§6.2).
   if (!can(user, "events:view") && !eventStaffIds(event).has(user.id)) {

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDataSource } from "@/lib/data";
-import { getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 
 const digits = (s: string) => s.replace(/\D/g, "");
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(user, "customers.view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const q = req.nextUrl.searchParams.get("q")?.trim().toLowerCase() ?? "";
   const customers = await getDataSource().listCustomers();
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(user, "customers.manage")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
   if (!body.name?.trim()) {

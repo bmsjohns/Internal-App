@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { Order, Supplier } from "@/lib/types";
@@ -8,6 +8,7 @@ import { canonicalStatus, relTime, VENUES, venueKeyOf } from "@/lib/config";
 import { useVenue } from "@/components/VenueContext";
 import PageHeader, { btnGhost, btnPrimary } from "@/components/PageHeader";
 import { VenueDot } from "@/components/chips";
+import { fetchJson } from "@/lib/fetch-json";
 
 // V3 §3: the To Order page — an actionable working queue of everything not
 // yet ordered (no daily cutoff; the outstanding queue is always current —
@@ -20,15 +21,23 @@ export default function ToOrderPage() {
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError("");
+    setOrders(null);
     Promise.all([
-      fetch("/api/orders").then((r) => r.json()),
-      fetch("/api/suppliers").then((r) => r.json()),
-    ]).then(([o, s]) => {
-      setOrders(o.orders ?? []);
-      setSuppliers(s.suppliers ?? []);
-    });
+      fetchJson<{ orders: Order[] }>("/api/orders"),
+      fetchJson<{ suppliers: Supplier[] }>("/api/suppliers"),
+    ])
+      .then(([o, s]) => {
+        setOrders(o.orders);
+        setSuppliers(s.suppliers);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Couldn’t load the ordering queue"));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const rows = useMemo(
     () =>
@@ -69,7 +78,15 @@ export default function ToOrderPage() {
             <Link href="/settings" className={btnGhost}>
               Suppliers
             </Link>
-            <a href="/api/export/outstanding" className={btnPrimary} download>
+            <a
+              href={
+                venue === "all"
+                  ? "/api/export/outstanding"
+                  : `/api/export/outstanding?location=${encodeURIComponent(VENUES[venue].label)}`
+              }
+              className={btnPrimary}
+              download
+            >
               Export XLSX
             </a>
           </>
@@ -82,7 +99,12 @@ export default function ToOrderPage() {
         </p>
       </PageHeader>
 
-      {error && <p className="px-5 pt-4 font-semibold text-coral sm:px-8">{error}</p>}
+      {error && (
+        <div className="flex items-center gap-3 px-5 pt-4 font-semibold text-coral sm:px-8">
+          <span>{error}</span>
+          {!orders && <button onClick={load} className="text-sm underline">Retry</button>}
+        </div>
+      )}
 
       <div className="mx-auto w-full max-w-[1080px] flex-1 px-5 pb-12 pt-6 sm:px-8">
         {!orders && <p className="text-stone">Loading…</p>}
@@ -163,7 +185,8 @@ export default function ToOrderPage() {
 
                 <button
                   onClick={() => patch(o.id, { status: "Ordered" })}
-                  disabled={busy}
+                  disabled={busy || !o.publisher.trim()}
+                  title={!o.publisher.trim() ? "Choose a supplier first" : undefined}
                   className={btnPrimary}
                 >
                   {busy ? "…" : "Mark ordered"}

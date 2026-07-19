@@ -10,7 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: "No events access" }, { status: 403 });
   }
   const venues = await getEventsDataSource().listVenuesFull();
-  return NextResponse.json({ venues });
+  return NextResponse.json({ venues, canEdit: can(user, "events:edit") });
 }
 
 export async function POST(req: NextRequest) {

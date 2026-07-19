@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getDataSource } from "@/lib/data";
-import { canDeleteAt, getSessionUser } from "@/lib/auth";
+import { can, canDeleteAt, getSessionUser } from "@/lib/auth";
 import { VENUES, venueKeyOf } from "@/lib/config";
 import PageHeader, { btnGhost } from "@/components/PageHeader";
 import { Avatar, StatusChip } from "@/components/chips";
@@ -19,8 +19,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const user = await getSessionUser();
   const ds = getDataSource();
   const order = await ds.getOrder(id);
-  if (!order) notFound();
+  if (!order || !user || !can(user, "orders.view", order.location)) notFound();
   const customer = order.customerIds[0] ? await ds.getCustomer(order.customerIds[0]) : null;
+  const canManage = can(user, "orders.manage", order.location);
 
   const venue = VENUES[venueKeyOf(order.location)];
 
@@ -46,10 +47,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         title=""
         actions={
           <>
-            <Link href={`/orders/${order.id}/edit`} className={btnGhost}>
-              Edit
-            </Link>
-            {user && canDeleteAt(user, order.location) && (
+            {canManage && <Link href={`/orders/${order.id}/edit`} className={btnGhost}>Edit</Link>}
+            {canDeleteAt(user, order.location) && (
               <DeleteOrderButton orderId={order.id} bookTitle={order.bookTitle} />
             )}
           </>
@@ -96,6 +95,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               rawStatus={order.status}
               lastModified={order.lastModified}
               log={order.statusLog}
+              supplier={order.publisher}
+              readOnly={!canManage}
             />
           </div>
         </div>

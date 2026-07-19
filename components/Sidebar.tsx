@@ -13,10 +13,10 @@ const ic = (p: string) => (
 );
 
 const MODULES = [
-  { href: "/briefing", label: "Daily Briefing", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h9M8 13h9M8 17h6"/>' },
-  { href: "/orders", label: "Orders", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>' },
-  { href: "/customers", label: "Customers", icon: '<circle cx="12" cy="8" r="4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>' },
-  { href: "/to-order", label: "To order", icon: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>' },
+  { href: "/briefing", label: "Daily Briefing", permission: "briefing.view", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h9M8 13h9M8 17h6"/>' },
+  { href: "/orders", label: "Orders", permission: "orders.view", icon: '<path d="M4 4h13l3 3v13H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>' },
+  { href: "/customers", label: "Customers", permission: "customers.view", icon: '<circle cx="12" cy="8" r="4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>' },
+  { href: "/to-order", label: "To order", permission: "orders.view", icon: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>' },
 ];
 
 // Events Phase 1 — only shown to the small pitching group (pitching:view).
@@ -94,7 +94,7 @@ const NAV_GROUPS: NavGroup[] = [
     key: "returns",
     label: "Returns",
     icon: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5 5 5 0 0 1-5 5H8"/>',
-    permission: "returns:view",
+    permission: "returns.view",
     children: [
       { href: "/returns/staging", label: "To be returned", icon: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5 5 5 0 0 1-5 5H8"/>', badge: "returnsStaging" },
       { href: "/returns/picklists", label: "Pick lists", icon: '<rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3h6v2"/><path d="M9 13l2 2 4-4"/>', badge: "returnsPick" },
@@ -114,9 +114,8 @@ const ORDERS_REFRESH_MS = 30_000;
 let ordersCache: { at: number; orders: Order[] } | null = null;
 
 function roleLine(user: SessionUser): string {
-  if (user.role !== "manager") return "Staff";
-  if (user.managerLocations === "all") return "Manager · both venues";
-  return `Manager · ${user.managerLocations.join(", ")}`;
+  const names: Record<string, string> = { admin: "Admin", manager: "Manager", "events-lead": "Events Lead", "bar-floor-staff": "Bar / Floor Staff", "book-club-manager": "Book Club Manager" };
+  return `${names[user.role] ?? user.role} · ${user.locations.length === 2 ? "both venues" : user.locations[0]}`;
 }
 
 export default function Sidebar({ user }: { user: SessionUser | null }) {
@@ -179,7 +178,7 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
   const canPitch = !!user?.permissions.includes("pitching:view");
   const canEvents = !!user?.permissions.includes("events:view");
   const modules = [
-    ...MODULES,
+    ...MODULES.filter((module) => !!user?.permissions.includes(module.permission)),
     ...(canPitch ? [PITCHING_MODULE] : []),
     ...(canEvents ? EVENTS_MODULES : []),
   ];
@@ -222,6 +221,16 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
               </Link>
             ));
           })()}
+          {(user?.permissions.includes("settings:manage") || user?.permissions.includes("team.manage")) && (
+            <Link
+              href="/settings"
+              className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13px] font-semibold ${
+                pathname.startsWith("/settings") ? "bg-shell text-rust" : "text-charcoal"
+              }`}
+            >
+              Settings
+            </Link>
+          )}
         </nav>
         <select
           value={venue}
@@ -363,7 +372,7 @@ export default function Sidebar({ user }: { user: SessionUser | null }) {
               </span>
             </span>
           ))}
-          {user?.permissions.includes("settings:manage") && (
+          {(user?.permissions.includes("settings:manage") || user?.permissions.includes("team.manage")) && (
             <>
               <div className="mx-1 my-3 h-px bg-cream-2" />
               <Link

@@ -9,23 +9,45 @@ import { EVENT_STATUSES, eventStatus } from "@/lib/events";
 import PageHeader, { btnPrimary } from "@/components/PageHeader";
 import EventListTable from "@/components/events/EventListTable";
 import EventCalendar from "@/components/events/EventCalendar";
+import { useVenue } from "@/components/VenueContext";
+import { VENUES } from "@/lib/config";
 
 type View = "list" | "calendar";
+type DateScope = "upcoming" | "past";
+
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+// Before the Event Location migration, our own venues still identify their
+// shop clearly. Keep the global venue switch useful without inventing an
+// owner for external venues.
+const effectiveLocation = (event: ShowEvent): Location | null => {
+  if (event.location) return event.location;
+  const venueName = event.venueName.toLowerCase();
+  if (venueName.includes("simply books")) return "Simply Books";
+  if (venueName.includes("prologue")) return "Prologue";
+  return null;
+};
 
 /**
  * Events list + calendar (§5.1) — two views of the same fetched data with
  * shared filters, same pattern as Pitching's board/list toggle.
  */
 export default function EventsPage() {
+  const { venue, setVenue } = useVenue();
   const [events, setEvents] = useState<ShowEvent[] | null>(null);
+  const [canEdit, setCanEdit] = useState(false);
   const [error, setError] = useState("");
   const [denied, setDenied] = useState(false);
   const [view, setView] = useState<View>("list");
+  const [dateScope, setDateScope] = useState<DateScope>("upcoming");
   const [statusKey, setStatusKey] = useState("all");
   const [venueId, setVenueId] = useState("all");
   const [type, setType] = useState("all");
-  const [location, setLocation] = useState<"all" | Location>("all");
   const [sortBy, setSortBy] = useState<"date" | "name" | "venue" | "status">("date");
+  const location: "all" | Location = venue === "all" ? "all" : VENUES[venue].label;
 
   useEffect(() => {
     fetch("/api/events")
@@ -36,7 +58,10 @@ export default function EventsPage() {
         }
         return r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`));
       })
-      .then((d) => setEvents(d.events))
+      .then((d) => {
+        setEvents(d.events);
+        setCanEdit(!!d.canEdit);
+      })
       .catch((e) => setError(e.message));
   }, []);
 
@@ -53,19 +78,23 @@ export default function EventsPage() {
   }, [events]);
 
   const filtered = useMemo(() => {
+    const today = todayISO();
     return (events ?? []).filter((e) => {
+      const past = !!e.date && e.date < today;
+      if (dateScope === "past" ? !past : past) return false;
       if (statusKey !== "all" && eventStatus(e.status).key !== statusKey) return false;
       if (venueId !== "all" && e.venueId !== venueId) return false;
       if (type !== "all" && !e.types.includes(type)) return false;
-      if (location !== "all" && e.location !== location) return false;
+      if (location !== "all" && effectiveLocation(e) !== location) return false;
       return true;
     }).sort((a, b) => {
       if (sortBy === "name") return a.name.localeCompare(b.name);
       if (sortBy === "venue") return a.venueName.localeCompare(b.venueName);
       if (sortBy === "status") return eventStatus(a.status).label.localeCompare(eventStatus(b.status).label);
-      return (a.date || "9999").localeCompare(b.date || "9999") || a.time.localeCompare(b.time);
+      const dateOrder = (a.date || "9999").localeCompare(b.date || "9999") || a.time.localeCompare(b.time);
+      return dateScope === "past" ? -dateOrder : dateOrder;
     });
-  }, [events, statusKey, venueId, type, location, sortBy]);
+  }, [events, statusKey, venueId, type, location, sortBy, dateScope]);
 
   if (denied) {
     return (
@@ -95,11 +124,11 @@ export default function EventsPage() {
       <PageHeader
         eyebrow="Events · Phase 2"
         title="Events"
-        actions={
+        actions={canEdit ? (
           <Link href="/events/new" className={btnPrimary}>
             + New event
           </Link>
-        }
+        ) : undefined}
       >
         <p className="mb-0 mt-1.5 max-w-[560px] text-[13.5px] text-charcoal">
           Confirmed and provisional bookings. Assign the team, build the call sheet, track the run of show.
@@ -112,6 +141,10 @@ export default function EventsPage() {
             <button role="tab" aria-selected={view === "calendar"} onClick={() => setView("calendar")} className={segBtn(view === "calendar")}>
               Calendar
             </button>
+          </div>
+          <div className="flex gap-1" aria-label="Date range">
+            <button onClick={() => setDateScope("upcoming")} className={segBtn(dateScope === "upcoming")}>Upcoming</button>
+            <button onClick={() => setDateScope("past")} className={segBtn(dateScope === "past")}>Past</button>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {[{ key: "all", label: "All" }, ...EVENT_STATUSES].map((s) => {
@@ -147,7 +180,12 @@ export default function EventsPage() {
               </option>
             ))}
           </select>
-          <select value={location} onChange={(e) => setLocation(e.target.value as "all" | Location)} className={select} aria-label="Location filter">
+          <select
+            value={location}
+            onChange={(e) => setVenue(e.target.value === "Simply Books" ? "simply" : e.target.value === "Prologue" ? "prologue" : "all")}
+            className={select}
+            aria-label="Location filter"
+          >
             <option value="all">All locations</option>
             {LOCATIONS.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>

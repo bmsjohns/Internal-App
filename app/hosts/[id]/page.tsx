@@ -8,12 +8,18 @@ import PageHeader from "@/components/PageHeader";
 export default function HostDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [host, setHost] = useState<Host | null>(null);
+  const [canEdit, setCanEdit] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`/api/hosts/${id}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status === 404 ? "Host not found." : "Couldn’t load the host."))))
-      .then((d) => setHost(d.host))
+    Promise.all([fetch(`/api/hosts/${id}`), fetch("/api/events/meta")])
+      .then(async ([hostResponse, metaResponse]) => {
+        if (!hostResponse.ok) throw new Error(hostResponse.status === 404 ? "Host not found." : "Couldn’t load the host.");
+        if (!metaResponse.ok) throw new Error("Couldn’t check editing access.");
+        const [hostData, meta] = await Promise.all([hostResponse.json(), metaResponse.json()]);
+        setHost(hostData.host);
+        setCanEdit(!!meta.canEdit);
+      })
       .catch((e) => setError(e.message));
   }, [id]);
 
@@ -26,5 +32,5 @@ export default function HostDetailPage({ params }: { params: Promise<{ id: strin
     );
   }
   if (!host) return <p className="p-8 text-stone">Loading…</p>;
-  return <HostEditor initial={host} />;
+  return <HostEditor initial={host} canEdit={canEdit} />;
 }

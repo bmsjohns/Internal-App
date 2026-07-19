@@ -518,14 +518,21 @@ export interface ReturnRequestInput {
   lines: ReturnLineInput[];
 }
 
-export type Role = "staff" | "manager";
+import type { PermissionKey, PermissionOverride, RoleId } from "@/lib/permissions";
+
+/** @deprecated Use RoleId. Kept as an alias while older module code migrates. */
+export type Role = RoleId;
 
 export interface SessionUser {
   id: string;
   name: string;
-  role: Role;
-  /** Venues this user's manager powers apply to. "all" = joint manager across both. */
+  email: string;
+  role: RoleId;
+  /** Compatibility field for older screens; location checks use `locations`. */
   managerLocations: Location[] | "all";
-  /** Permission strings (V3: `settings:manage`). Defaults derive from role. */
+  locations: Location[];
+  rolePermissions: PermissionKey[];
+  permissionOverrides: PermissionOverride[];
+  /** Compatibility list used by existing navigation while endpoints migrate. */
   permissions: string[];
 }

@@ -13,7 +13,7 @@ import { LOCATIONS } from "@/lib/types";
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "hub:send")) {
+  if (!can(user, "ordering.send")) {
     return NextResponse.json(
       { error: "Sending orders needs the hub:send permission — ask a manager to send this batch" },
       { status: 403 }
@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
   if (!publisherId || !LOCATIONS.includes(account) || !["Email", "CSV"].includes(method)) {
     return NextResponse.json({ error: "publisherId, account and method (Email/CSV) are required" }, { status: 400 });
   }
+  if (!can(user, "ordering.send", account)) return NextResponse.json({ error: "Order sending is not granted for this location" }, { status: 403 });
   const hub = getHubDataSource();
   const [lines, publishers] = await Promise.all([hub.listLines(), hub.listPublishers()]);
   const batch = batchPending(lines, publishers).find(

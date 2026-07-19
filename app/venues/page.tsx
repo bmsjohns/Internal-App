@@ -16,12 +16,16 @@ const MAP_PIN = (
 export default function VenuesPage() {
   const router = useRouter();
   const [venues, setVenues] = useState<Venue[] | null>(null);
+  const [canEdit, setCanEdit] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     fetch("/api/venues")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status === 403 ? "The Events module needs access — ask Ben." : `HTTP ${r.status}`))))
-      .then((d) => setVenues(d.venues))
+      .then((d) => {
+        setVenues(d.venues);
+        setCanEdit(!!d.canEdit);
+      })
       .catch((e) => setError(e.message));
   }, []);
 
@@ -30,11 +34,11 @@ export default function VenuesPage() {
       <PageHeader
         eyebrow="Events · Phase 2"
         title="Venues"
-        actions={
+        actions={canEdit ? (
           <Link href="/venues/new" className={btnPrimary}>
             + New venue
           </Link>
-        }
+        ) : undefined}
       >
         <p className="mb-0 mt-1.5 max-w-[560px] text-[13.5px] text-charcoal">
           Where events happen — our own spaces and hired-in rooms.

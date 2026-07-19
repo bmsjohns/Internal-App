@@ -6,15 +6,15 @@ import { LOCATIONS } from "@/lib/types";
 import type { ReturnRequestInput, ReturnStatus } from "@/lib/types";
 import { RETURN_STATUSES } from "@/lib/returns";
 
-// Returns has its own permission (Ben, 19 Jul 2026): returns:view —
-// default-on for both roles, tailorable per person in Clerk metadata.
-// Publishers ride along in the payload because every screen needs account
-// numbers and rep names.
+// Returns has its own module permissions (Ben, 19 Jul 2026): returns.view
+// to see the queue, returns.manage for every lifecycle action — managed
+// through the in-app roles system like the rest. Publishers ride along in
+// the payload because every screen needs account numbers and rep names.
 
 export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "returns:view")) {
+  if (!can(user, "returns.view")) {
     return NextResponse.json({ error: "Returns access hasn't been granted to your account" }, { status: 403 });
   }
   const [returns, publishers] = await Promise.all([
@@ -29,7 +29,7 @@ const VALID_STATUS = new Set(RETURN_STATUSES.map((s) => s.key));
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "returns:view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!can(user, "returns.manage")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await req.json();
   const src = getReturnsDataSource();
   try {

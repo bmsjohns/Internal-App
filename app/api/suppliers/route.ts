@@ -5,6 +5,7 @@ import { can, getSessionUser } from "@/lib/auth";
 export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(user, "orders.manage") && !can(user, "ordering.view") && !can(user, "settings.suppliers.manage")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const suppliers = await getDataSource().listSuppliers();
   return NextResponse.json({ suppliers });
 }
@@ -12,7 +13,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "settings:manage")) {
+  if (!can(user, "settings.suppliers.manage")) {
     return NextResponse.json({ error: "Settings can only be changed by a manager" }, { status: 403 });
   }
   const body = await req.json();

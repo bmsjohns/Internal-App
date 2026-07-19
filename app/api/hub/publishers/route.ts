@@ -8,8 +8,8 @@ import { getHubDataSource } from "@/lib/data/hub";
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "settings:manage")) {
-    return NextResponse.json({ error: "Editing publisher reference data needs settings:manage" }, { status: 403 });
+  if (!can(user, "settings.suppliers.manage")) {
+    return NextResponse.json({ error: "Editing publisher reference data needs supplier settings access" }, { status: 403 });
   }
   const body = await req.json();
   const hub = getHubDataSource();

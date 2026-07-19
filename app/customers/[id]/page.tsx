@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getDataSource } from "@/lib/data";
+import { can, getSessionUser } from "@/lib/auth";
 import PageHeader from "@/components/PageHeader";
 import { Avatar } from "@/components/chips";
 import OrdersTable from "@/components/OrdersTable";
@@ -10,12 +11,15 @@ export const dynamic = "force-dynamic";
 // shared orders table rather than a bespoke list.
 export default async function CustomerProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getSessionUser();
+  if (!user || !can(user, "customers.view")) notFound();
   const ds = getDataSource();
   const customer = await ds.getCustomer(id);
   if (!customer) notFound();
   // Fetched by the customer's order links rather than filtering listOrders,
   // so the full history shows even past the recent-orders window.
   const orders = (await ds.getOrdersByIds(customer.orderIds))
+    .filter((order) => can(user, "orders.view", order.location))
     .sort((a, b) => (a.orderDate < b.orderDate ? 1 : -1))
     .map((o) => ({ ...o, customerName: customer.name, customerPhone: customer.phone }));
 

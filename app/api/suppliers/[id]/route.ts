@@ -7,7 +7,7 @@ type Params = { params: Promise<{ id: string }> };
 async function guard() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "settings:manage")) {
+  if (!can(user, "settings.suppliers.manage")) {
     return NextResponse.json({ error: "Settings can only be changed by a manager" }, { status: 403 });
   }
   return null;

@@ -14,17 +14,19 @@ export async function GET() {
   const out: Record<string, number> = {};
   try {
     if (can(user, "clubs:view")) {
-      const memberships = await getClubsDataSource().listMemberships();
-      out.failedPayments = memberships.filter((s) => s.status !== "cancelled" && s.payStatus !== "ok").length;
+      const clubsSource = getClubsDataSource();
+      const [clubs, memberships] = await Promise.all([clubsSource.listClubs(), clubsSource.listMemberships()]);
+      const visibleClubIds = new Set(clubs.filter((club) => can(user, "clubs.view", club.location)).map((club) => club.id));
+      out.failedPayments = memberships.filter((s) => visibleClubIds.has(s.clubId) && s.status !== "cancelled" && s.payStatus !== "ok").length;
     }
     if (can(user, "hub:view")) {
-      const lines = await getHubDataSource().listLines();
+      const lines = (await getHubDataSource().listLines()).filter((line) => !line.account || can(user, "ordering.view", line.account));
       out.drafts = lines.filter((l) => l.state === "draft").length;
       out.staleDrafts = lines.filter((l) => isStaleDraft(l)).length;
       out.pending = lines.filter((l) => l.state === "pending").length;
       out.outstanding = lines.filter((l) => l.state === "ordered").length;
     }
-    if (can(user, "returns:view")) {
+    if (can(user, "returns.view")) {
       const returns = await getReturnsDataSource().listReturns();
       out.returnsStaging = returns.filter((r) => r.status === "requested").length;
       out.returnsOutstanding = returns.filter((r) => r.status !== "requested" && r.status !== "credit").length;

@@ -14,7 +14,7 @@ export async function GET() {
   if (!can(user, "pitching:view")) {
     return NextResponse.json({ error: "No pitching access" }, { status: 403 });
   }
-  const pitches = await getEventsDataSource().listPitches();
+  const pitches = (await getEventsDataSource().listPitches()).filter((pitch) => !pitch.location || can(user, "events.pitching.view", pitch.location));
   pitches.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   return NextResponse.json({ pitches });
 }
@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
+  if (body.location && !can(user, "events.pitching.manage", body.location)) return NextResponse.json({ error: "No pitching access at this location" }, { status: 403 });
   // §3.3: minimal required fields — a pitch is an early-stage record.
   if (!body.authorName?.trim()) {
     return NextResponse.json({ error: "Author name is required" }, { status: 400 });

@@ -9,9 +9,9 @@ export async function GET() {
   if (!can(user, "events:view")) {
     return NextResponse.json({ error: "No events access" }, { status: 403 });
   }
-  const events = await getEventsDataSource().listEvents();
+  const events = (await getEventsDataSource().listEvents()).filter((event) => !event.location || can(user, "events.view", event.location));
   events.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || a.time.localeCompare(b.time));
-  return NextResponse.json({ events });
+  return NextResponse.json({ events, canEdit: can(user, "events:edit") });
 }
 
 export async function POST(req: NextRequest) {
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
   }
   const body = await req.json();
   const input = parseEventBody(body);
+  if (input.location && !can(user, "events.manage", input.location)) return NextResponse.json({ error: "No event management access at this location" }, { status: 403 });
   if (!input.name) {
     return NextResponse.json({ error: "Name / author is required" }, { status: 400 });
   }

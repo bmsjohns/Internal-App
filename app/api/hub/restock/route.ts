@@ -8,7 +8,7 @@ import { LOCATIONS } from "@/lib/types";
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "hub:view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!can(user, "ordering.manage")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await req.json();
   const hub = getHubDataSource();
   try {
@@ -18,11 +18,13 @@ export async function POST(req: NextRequest) {
     }
     // default: add a capture
     if (!body?.title?.trim()) return NextResponse.json({ error: "Title (or a scanned ISBN) is required" }, { status: 400 });
+    const location = LOCATIONS.includes(body.location) ? body.location : "Prologue";
+    if (!can(user, "ordering.manage", location)) return NextResponse.json({ error: "No access at this location" }, { status: 403 });
     const item = await hub.addRestock({
       title: String(body.title).trim(),
       isbn: String(body.isbn ?? "").trim(),
       quantity: Math.max(1, Math.floor(Number(body.quantity) || 1)),
-      location: LOCATIONS.includes(body.location) ? body.location : "Prologue",
+      location,
       by: user.name,
       supplier: String(body.supplier ?? "").trim(),
     });

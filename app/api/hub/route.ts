@@ -20,12 +20,12 @@ export async function GET() {
     getDataSource().listSuppliers().catch(() => []),
   ]);
   return NextResponse.json({
-    lines,
+    lines: lines.filter((line) => !line.account || can(user, "ordering.view", line.account)),
     publishers,
-    restock,
+    restock: restock.filter((item) => can(user, "ordering.view", item.location)),
     suppliers,
-    canSend: can(user, "hub:send"),
-    canEditPublishers: can(user, "settings:manage"),
+    canSend: can(user, "ordering.send"),
+    canEditPublishers: can(user, "settings.suppliers.manage"),
     userName: user.name,
   });
 }

@@ -32,6 +32,9 @@ export interface LumaCalendarPreview {
 
 export interface LumaPreview {
   connected: boolean;
+  integration: "mock" | "live" | "error";
+  canCreate: boolean;
+  syncError?: string;
   eventId: string;
   eventUrl: string;
   calendar: LumaCalendarPreview;
@@ -156,6 +159,8 @@ function buildLuma(event: ShowEvent): LumaPreview {
   if (!linked) {
     return {
       connected: false,
+      integration: "mock",
+      canCreate: false,
       eventId: "",
       eventUrl: "",
       calendar,
@@ -184,6 +189,8 @@ function buildLuma(event: ShowEvent): LumaPreview {
 
   return {
     connected: true,
+    integration: "mock",
+    canCreate: false,
     eventId: `evt-${(event.id || String(seed)).replace(/^ev-/, "")}`,
     eventUrl: event.lumaLink,
     calendar,
@@ -220,8 +227,8 @@ function operationalStage(event: ShowEvent, tasks: EventTaskPreview[]): EventOpe
  * replace this function with the Luma API + stored operational records without
  * changing the event UI contracts.
  */
-export function getEventOperationsPreview(event: ShowEvent): EventOperationsPreview {
-  const luma = buildLuma(event);
+export function getEventOperationsPreview(event: ShowEvent, lumaOverride?: LumaPreview): EventOperationsPreview {
+  const luma = lumaOverride ?? buildLuma(event);
   const tasks = buildTasks(event);
   const days = daysUntil(event.date);
   const reserved = luma.ticketTypes.find((ticket) => ticket.id === "book-ticket")?.issued ?? 0;

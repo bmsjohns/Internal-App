@@ -281,7 +281,7 @@ export default function EventEditor({
       <div className="w-full max-w-[1180px] px-4 pb-14 pt-[76px] sm:px-8 lg:pt-6">
         {operationsPreview && (
           <div className="mb-5 flex flex-col gap-3">
-            <PreviewModeNotice />
+            <PreviewModeNotice luma={operationsPreview.luma} />
             <EventReadinessStrip operations={operationsPreview} />
           </div>
         )}
@@ -574,7 +574,7 @@ export default function EventEditor({
           />
         )}
 
-        {tab === "tickets" && operationsPreview && <EventTicketsTab initial={operationsPreview.luma} />}
+        {tab === "tickets" && operationsPreview && <EventTicketsTab initial={operationsPreview.luma} backstageEventId={initial.id} canEdit={meta.canEdit} />}
 
         {/* ============ RUNNING ORDER ============ */}
         {tab === "running" && (

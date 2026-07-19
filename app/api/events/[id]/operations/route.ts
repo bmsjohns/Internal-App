@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { can, getSessionUser } from "@/lib/auth";
 import { getEventsDataSource } from "@/lib/data/events";
 import { getEventOperationsPreview } from "@/lib/event-operations";
+import { getLiveLumaPreview, isLumaLive, publicLumaCalendars } from "@/lib/luma";
 
 type Params = { params: Promise<{ id: string }> };
 
 /**
- * Read-only preview seam for richer event operations and Luma data.
- * There are intentionally no POST/PATCH/DELETE handlers in this branch.
+ * Event operations remain read-only here. When explicitly enabled, only the
+ * Luma portion is hydrated from live aggregate data.
  */
 export async function GET(_req: NextRequest, { params }: Params) {
   const user = await getSessionUser();
@@ -16,5 +17,20 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const event = await getEventsDataSource().getEvent((await params).id);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ operations: getEventOperationsPreview(event), source: "mock-luma" });
+  if (!isLumaLive()) {
+    const operations = getEventOperationsPreview(event);
+    operations.luma.availableCalendars = publicLumaCalendars();
+    return NextResponse.json({ operations, source: "mock-luma" });
+  }
+  try {
+    const luma = await getLiveLumaPreview(event);
+    return NextResponse.json({ operations: getEventOperationsPreview(event, luma), source: "live-luma" });
+  } catch (error) {
+    const operations = getEventOperationsPreview(event);
+    operations.luma.integration = "error";
+    operations.luma.canCreate = true;
+    operations.luma.syncError = error instanceof Error ? error.message : "Luma sync failed.";
+    operations.luma.availableCalendars = publicLumaCalendars();
+    return NextResponse.json({ operations, source: "luma-fallback" });
+  }
 }

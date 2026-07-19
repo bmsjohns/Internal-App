@@ -24,17 +24,19 @@ const ICON_SYNC = '<path d="M20 7h-5V2"/><path d="M20 7a8 8 0 1 0 1 8"/>';
 const ICON_TICKET = '<path d="M3 9a2 2 0 0 0 0 4v4h18v-4a2 2 0 0 0 0-4V5H3z"/><path d="M13 5v12"/>';
 const ICON_BOX = '<path d="M21 8l-9 5-9-5"/><path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M12 13v8"/>';
 
-export function PreviewModeNotice() {
+export function PreviewModeNotice({ luma }: { luma: LumaPreview }) {
+  const live = luma.integration === "live";
+  const failed = luma.integration === "error";
   return (
-    <div className="flex flex-col items-start justify-between gap-2.5 rounded-[10px] border border-[#C8A96B66] bg-[#F7EEDC] px-4 py-3 text-[#765823] sm:flex-row sm:items-center sm:py-2.5">
+    <div className={`flex flex-col items-start justify-between gap-2.5 rounded-[10px] border px-4 py-3 sm:flex-row sm:items-center sm:py-2.5 ${live ? "border-[#5F735544] bg-[#EEF3EC] text-[#496143]" : failed ? "border-[#AD3B2844] bg-shell text-rust" : "border-[#C8A96B66] bg-[#F7EEDC] text-[#765823]"}`}>
       <div className="flex items-start gap-2.5 sm:items-center">
         <span className="mt-0.5 shrink-0 sm:mt-0">{icon(ICON_SPARK, 14)}</span>
         <div className="flex flex-col gap-0.5 text-[12px] sm:flex-row sm:items-center sm:gap-2">
-          <span className="font-semibold">Luma sandbox</span>
-          <span className="font-normal opacity-80">Mock Luma data · operational interactions reset on refresh</span>
+          <span className="font-semibold">{live ? "Luma connected" : failed ? "Luma needs attention" : "Luma sandbox"}</span>
+          <span className="font-normal opacity-80">{live ? "Live aggregate ticket data · guest details are not stored" : failed ? luma.syncError : "Mock Luma data · no external writes"}</span>
         </div>
       </div>
-      <span className="rounded-full border border-[#B0812F44] bg-white/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]">Mock integration</span>
+      <span className="rounded-full border border-current/20 bg-white/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]">{live ? "Live reads" : failed ? "Fallback data" : "Mock integration"}</span>
     </div>
   );
 }
@@ -165,19 +167,53 @@ export function EventTasksTab({ tasks, onChange }: { tasks: EventTaskPreview[]; 
   );
 }
 
-export function EventTicketsTab({ initial }: { initial: LumaPreview }) {
+export function EventTicketsTab({ initial, backstageEventId, canEdit }: { initial: LumaPreview; backstageEventId: string; canEdit: boolean }) {
   const [luma, setLuma] = useState(initial);
   const [syncing, setSyncing] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [message, setMessage] = useState("");
+  const [calendarId, setCalendarId] = useState(initial.calendar.id);
   const issued = luma.ticketTypes.reduce((sum, ticket) => sum + ticket.issued, 0);
   const available = Math.max(0, luma.capacity - issued);
   const sellThrough = luma.capacity ? Math.round((issued / luma.capacity) * 100) : 0;
 
-  const sync = () => {
+  const sync = async () => {
     setSyncing(true);
-    window.setTimeout(() => {
-      setLuma((current) => ({ ...current, lastSyncedAt: new Date().toISOString() }));
+    setMessage("");
+    try {
+      const response = await fetch(`/api/events/${backstageEventId}/operations`, { cache: "no-store" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Couldn’t sync Luma.");
+      setLuma(body.operations.luma);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Couldn’t sync Luma.");
+    } finally {
       setSyncing(false);
-    }, 650);
+    }
+  };
+
+  const connect = async (action: "link" | "create") => {
+    if (action === "link" && !linkUrl.trim()) {
+      setMessage("Paste the Luma event URL first.");
+      return;
+    }
+    if (action === "create" && !window.confirm("Create a private, registration-closed draft in Luma? Nothing will be published or put on sale.")) return;
+    setSyncing(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/events/${backstageEventId}/luma`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(action === "link" ? { action, url: linkUrl } : { action, calendarId, confirm: true }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Couldn’t connect Luma.");
+      setLuma(body.operations.luma);
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Couldn’t connect Luma.");
+      setSyncing(false);
+    }
   };
 
   if (!luma.connected) {
@@ -188,15 +224,20 @@ export function EventTicketsTab({ initial }: { initial: LumaPreview }) {
         <p className="mx-auto mb-5 max-w-[500px] text-[13.5px] leading-relaxed text-stone">Choose the target calendar, then either link an existing Luma event or explicitly push this Backstage event up to Luma.</p>
         <div className="mx-auto mb-4 max-w-[360px] rounded-lg border border-cream-2 bg-cream px-3 py-2.5 text-left">
           <label className="eyebrow mb-1.5 block text-stone" htmlFor="preview-luma-calendar">Target calendar</label>
-          <select id="preview-luma-calendar" disabled value={luma.calendar.id} className="w-full bg-transparent text-[13px] font-semibold text-charcoal outline-none">
-            {luma.availableCalendars.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendar.name}{calendar.active ? " · connected" : " · future"}</option>)}
+          <select id="preview-luma-calendar" disabled={!luma.canCreate || !canEdit || syncing} value={calendarId} onChange={(event) => setCalendarId(event.target.value)} className="w-full bg-transparent text-[13px] font-semibold text-charcoal outline-none disabled:opacity-65">
+            {luma.availableCalendars.map((calendar) => <option key={calendar.id} value={calendar.id} disabled={!calendar.active}>{calendar.name}{calendar.active ? " · connected" : " · key not configured"}</option>)}
           </select>
         </div>
+        {luma.canCreate && canEdit && (
+          <div className="mx-auto mb-3 max-w-[480px]">
+            <input value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="Paste an existing lu.ma or luma.com event URL" className="w-full rounded-lg border border-cream-2 bg-cream px-3.5 py-2.5 text-[13px] outline-none focus:border-rust" />
+          </div>
+        )}
         <div className="flex flex-col justify-center gap-2 sm:flex-row">
-          <button className="cursor-not-allowed rounded-md border border-rust bg-white px-5 py-2.5 text-[13px] font-semibold text-rust opacity-85" title="Disabled in safe preview mode">Link existing event</button>
-          <button className="cursor-not-allowed rounded-md bg-rust px-5 py-2.5 text-[13px] font-semibold text-cream opacity-85" title="Disabled in safe preview mode">Push event to Luma</button>
+          <button onClick={() => void connect("link")} disabled={!luma.canCreate || !canEdit || syncing} className="rounded-md border border-rust bg-white px-5 py-2.5 text-[13px] font-semibold text-rust disabled:cursor-not-allowed disabled:opacity-55">Link existing event</button>
+          <button onClick={() => void connect("create")} disabled={!luma.canCreate || !canEdit || syncing} className="rounded-md bg-rust px-5 py-2.5 text-[13px] font-semibold text-cream disabled:cursor-not-allowed disabled:opacity-55">{syncing ? "Connecting…" : "Push private draft to Luma"}</button>
         </div>
-        <div className="mt-3 text-[11.5px] text-stone">Connection actions unlock when Luma API credentials are configured.</div>
+        <div className={`mt-3 text-[11.5px] ${message ? "font-semibold text-rust" : "text-stone"}`}>{message || (luma.canCreate ? "New events are created private with registration closed; finish ticket prices in Luma before publishing." : "Connection actions unlock when Luma API credentials are configured.")}</div>
       </div>
     );
   }
@@ -208,13 +249,13 @@ export function EventTicketsTab({ initial }: { initial: LumaPreview }) {
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5F735518] text-[#5F7355]">{icon('<path d="M8 12.5l2.5 2.5L16 9"/><circle cx="12" cy="12" r="9"/>', 18)}</span>
           <div>
             <div className="text-[13px] font-semibold text-charcoal">Connected to {luma.calendar.name} · {luma.eventId}</div>
-            <div className="mt-0.5 text-[11.5px] text-stone">Calendar-aware mock feed · synced {relativeTime(luma.lastSyncedAt)}</div>
+            <div className="mt-0.5 text-[11.5px] text-stone">{luma.integration === "live" ? "Live aggregate feed" : "Calendar-aware mock feed"} · synced {relativeTime(luma.lastSyncedAt)}</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <a href={luma.eventUrl} target="_blank" rel="noreferrer" className="rounded-md border border-cream-2 bg-white px-3 py-2 text-[11.5px] font-semibold text-rust">Open Luma ↗</a>
           <button onClick={sync} disabled={syncing} className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-cream-2 bg-white px-3 py-2 text-[11.5px] font-semibold text-charcoal disabled:opacity-60">
-            <span className={syncing ? "animate-spin" : ""}>{icon(ICON_SYNC, 13)}</span>{syncing ? "Syncing…" : "Preview sync"}
+            <span className={syncing ? "animate-spin" : ""}>{icon(ICON_SYNC, 13)}</span>{syncing ? "Syncing…" : luma.integration === "live" ? "Sync now" : "Preview sync"}
           </button>
         </div>
       </div>
@@ -231,7 +272,7 @@ export function EventTicketsTab({ initial }: { initial: LumaPreview }) {
           <div className="flex items-center justify-between border-b border-cream-2 px-5 py-4">
             <div>
               <div className="font-display text-[18px]">Ticket mix</div>
-              <div className="mt-0.5 text-xs text-stone">Live registration totals from the mock Luma feed</div>
+              <div className="mt-0.5 text-xs text-stone">{luma.integration === "live" ? "Live registration totals from Luma" : "Registration totals from the mock Luma feed"}</div>
             </div>
             <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.12em] ${luma.status === "sold_out" ? "bg-shell text-rust" : "bg-[#5F735514] text-[#5F7355]"}`}>{luma.status.replace("_", " ")}</span>
           </div>

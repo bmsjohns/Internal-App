@@ -3,7 +3,6 @@ import { getEventsDataSource } from "@/lib/data/events";
 import { can, getSessionUser } from "@/lib/auth";
 import { parseEventBody, parseRoles, parseSchedule } from "@/lib/events-api";
 import type { ShowEventInput } from "@/lib/types";
-import { EVENT_OPERATIONS_PREVIEW_ONLY } from "@/lib/event-operations";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -23,9 +22,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!can(user, "events:edit")) {
     return NextResponse.json({ error: "No events edit access" }, { status: 403 });
-  }
-  if (EVENT_OPERATIONS_PREVIEW_ONLY) {
-    return NextResponse.json({ error: "Event writes are disabled on the Luma preview branch" }, { status: 409 });
   }
   const body = await req.json();
   // Partial update: only touch the keys the client sent (optimistic tab
@@ -49,9 +45,6 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!can(user, "events:edit")) {
     return NextResponse.json({ error: "No events edit access" }, { status: 403 });
-  }
-  if (EVENT_OPERATIONS_PREVIEW_ONLY) {
-    return NextResponse.json({ error: "Event writes are disabled on the Luma preview branch" }, { status: 409 });
   }
   await getEventsDataSource().deleteEvent((await params).id);
   return NextResponse.json({ ok: true });

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ShowEvent, ShowEventInput } from "@/lib/types";
-import { EVENT_OPERATIONS_PREVIEW_ONLY, type EventOperationsPreview } from "@/lib/event-operations";
+import type { EventOperationsPreview } from "@/lib/event-operations";
 import { LOCATIONS } from "@/lib/types";
 import { EVENT_STATUSES, eventStaffIds, eventStatus } from "@/lib/events";
 import { btnDanger, btnGhost, btnPrimary } from "@/components/PageHeader";
@@ -203,8 +203,8 @@ export default function EventEditor({
     ...(operationsPreview ? [{ key: "results" as const, label: "Results" }] : []),
   ];
 
-  const disabled = !meta.canEdit || EVENT_OPERATIONS_PREVIEW_ONLY;
-  const previewMeta = EVENT_OPERATIONS_PREVIEW_ONLY ? { ...meta, canEdit: false } : meta;
+  const disabled = !meta.canEdit;
+  const previewMeta = meta;
   const numVal = (n: number | null) => (n === null ? "" : String(n));
   const setNum = (key: "bookTicket" | "ticketOnly" | "minOrder") => (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value.trim();
@@ -284,9 +284,6 @@ export default function EventEditor({
             <PreviewModeNotice />
             <EventReadinessStrip operations={operationsPreview} />
           </div>
-        )}
-        {!operationsPreview && EVENT_OPERATIONS_PREVIEW_ONLY && (
-          <div className="mb-5"><PreviewModeNotice /></div>
         )}
         {!meta.canEdit && (
           <div className="mb-4 rounded-lg border border-cream-2 bg-white px-4 py-3 text-[13px] text-charcoal">
@@ -450,7 +447,7 @@ export default function EventEditor({
                 <label className={labelCls} htmlFor="ev-min">Minimum order</label>
                 <input id="ev-min" inputMode="numeric" value={numVal(draft.minOrder)} onChange={setNum("minOrder")} className={inputCls} disabled={disabled} />
               </div>
-              {!isNew && meta.canEdit && !EVENT_OPERATIONS_PREVIEW_ONLY && (
+              {!isNew && meta.canEdit && (
                 <button onClick={remove} className={btnDanger}>
                   Delete event
                 </button>

@@ -1,8 +1,5 @@
 import type { ShowEvent } from "@/lib/types";
 
-/** Branch-level safety lock: this preview may read, but must never persist event changes. */
-export const EVENT_OPERATIONS_PREVIEW_ONLY = true;
-
 export type EventOperationalStage = "Planning" | "Preparing" | "Ready" | "Live" | "Reconciliation" | "Complete";
 export type EventTaskStatus = "todo" | "doing" | "done";
 

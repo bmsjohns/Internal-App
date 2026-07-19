@@ -30,11 +30,11 @@ export function PreviewModeNotice() {
       <div className="flex items-start gap-2.5 sm:items-center">
         <span className="mt-0.5 shrink-0 sm:mt-0">{icon(ICON_SPARK, 14)}</span>
         <div className="flex flex-col gap-0.5 text-[12px] sm:flex-row sm:items-center sm:gap-2">
-          <span className="font-semibold">Luma preview mode</span>
-          <span className="font-normal opacity-80">Mock data only · interactions reset on refresh · nothing is written</span>
+          <span className="font-semibold">Luma sandbox</span>
+          <span className="font-normal opacity-80">Mock Luma data · operational interactions reset on refresh</span>
         </div>
       </div>
-      <span className="rounded-full border border-[#B0812F44] bg-white/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]">Safe preview</span>
+      <span className="rounded-full border border-[#B0812F44] bg-white/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]">Mock integration</span>
     </div>
   );
 }
@@ -196,7 +196,7 @@ export function EventTicketsTab({ initial }: { initial: LumaPreview }) {
           <button className="cursor-not-allowed rounded-md border border-rust bg-white px-5 py-2.5 text-[13px] font-semibold text-rust opacity-85" title="Disabled in safe preview mode">Link existing event</button>
           <button className="cursor-not-allowed rounded-md bg-rust px-5 py-2.5 text-[13px] font-semibold text-cream opacity-85" title="Disabled in safe preview mode">Push event to Luma</button>
         </div>
-        <div className="mt-3 text-[11.5px] text-stone">Connection actions are disabled on this preview branch.</div>
+        <div className="mt-3 text-[11.5px] text-stone">Connection actions unlock when Luma API credentials are configured.</div>
       </div>
     );
   }

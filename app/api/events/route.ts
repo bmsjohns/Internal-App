@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getEventsDataSource } from "@/lib/data/events";
 import { can, getSessionUser } from "@/lib/auth";
 import { parseEventBody } from "@/lib/events-api";
-import { EVENT_OPERATIONS_PREVIEW_ONLY } from "@/lib/event-operations";
 
 export async function GET() {
   const user = await getSessionUser();
@@ -20,9 +19,6 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!can(user, "events:edit")) {
     return NextResponse.json({ error: "No events edit access" }, { status: 403 });
-  }
-  if (EVENT_OPERATIONS_PREVIEW_ONLY) {
-    return NextResponse.json({ error: "Event writes are disabled on the Luma preview branch" }, { status: 409 });
   }
   const body = await req.json();
   const input = parseEventBody(body);

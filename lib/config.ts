@@ -6,7 +6,7 @@ import type { Location } from "@/lib/types";
 export type VenueKey = "simply" | "prologue";
 
 export const VENUES: Record<VenueKey, { label: Location; short: string; color: string }> = {
-  simply: { label: "Simply Books", short: "Bramhall", color: "#2B4C6F" },
+  simply: { label: "Simply Books", short: "Bramhall", color: "#378573" },
   prologue: { label: "Prologue", short: "Weir Mill", color: "#AD3B28" },
 };
 

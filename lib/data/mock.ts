@@ -71,6 +71,19 @@ export const mockDataSource: DataSource = {
   async listOrders() {
     return orders.map(attach);
   },
+  async searchOrders(query) {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return [];
+    return orders
+      .map(attach)
+      .filter((o) =>
+        `${o.bookTitle} ${o.author} ${o.isbn} ${o.customerName ?? ""}`.toLowerCase().includes(needle)
+      );
+  },
+  async getOrdersByIds(ids) {
+    const wanted = new Set(ids);
+    return orders.filter((o) => wanted.has(o.id)).map(attach);
+  },
   async getOrder(oid) {
     const o = orders.find((x) => x.id === oid);
     return o ? attach(o) : null;

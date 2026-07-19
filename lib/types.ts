@@ -247,6 +247,204 @@ export type HostInput = Omit<Host, "id" | "eventIds" | "teamContacts"> & {
   teamContactIds: string[];
 };
 
+// ---------------------------------------------------------------------------
+// Regular Events — Book Clubs, Phase 1 (book-clubs-ordering-hub spec Part B)
+//
+// Members stay ENTIRELY separate from Customers in this phase — no linking,
+// matching or merging (spec B1, deliberate deferral). "Club" is modelled with
+// a `kind` field so language classes / writing groups extend the same tables
+// later without rework (spec Part D), but only book-club UI exists.
+// ---------------------------------------------------------------------------
+
+/** One audit-trail line, same shape as Orders' Status Log (spec B2). */
+export interface AuditEntry {
+  at: string; // ISO timestamp
+  by: string; // user's name
+  action: string;
+}
+
+export interface Member {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  stripeCustomerId: string;
+  /** CRM-style free-text notes. */
+  notes: string;
+}
+
+export type MemberInput = Omit<Member, "id">;
+
+/** Future supertype seam: book clubs now; classes/groups later (spec D). */
+export type ClubKind = "book-club" | "language-class" | "writing-group";
+export type ClubStatus = "active" | "paused" | "inactive";
+
+export interface Club {
+  id: string;
+  name: string;
+  kind: ClubKind;
+  location: Location;
+  description: string;
+  genre: string;
+  /** Meeting cadence, free text: "First Tuesday · monthly". */
+  cadence: string;
+  stripePriceId: string;
+  status: ClubStatus;
+  /** Manually-set target size, e.g. for room capacity. Going over is fine
+   *  (a club can squeeze someone in) — this is guidance, not a hard cap.
+   *  null when nobody's set it yet. */
+  memberCapacity: number | null;
+}
+
+export type ClubInput = Omit<Club, "id">;
+
+export type MembershipStatus = "active" | "paused" | "cancelled";
+/** Payment standing, kept live by Stripe webhooks (spec B2). */
+export type PayStatus = "ok" | "failed" | "past_due";
+
+/** Join table: Member × Club × Stripe subscription (spec B1). */
+export interface ClubMembership {
+  id: string;
+  memberId: string;
+  clubId: string;
+  stripeSubscriptionId: string;
+  status: MembershipStatus;
+  joined: string; // YYYY-MM-DD
+  payStatus: PayStatus;
+  /** Display-only card hint from Stripe, e.g. "•••• 4242 (expires soon)". */
+  cardLabel: string;
+  /** Current period end (renewal date), YYYY-MM-DD. */
+  periodEnd: string;
+  /** Monthly fee in GBP. */
+  amount: number;
+  log: AuditEntry[];
+}
+
+/** One row per Club × Month. Order status is NOT stored here — the linked
+ *  hub line owns it and this record reflects it (spec B4/C4). */
+export interface BookSelection {
+  id: string;
+  clubId: string;
+  month: string; // "YYYY-MM"
+  title: string;
+  isbn: string;
+  publisherId: string | null;
+  imprint: string;
+  rrp: number | null;
+  selectedBy: string;
+  selectedAt: string; // ISO
+  hostCopy: boolean;
+  /** Exact active-member count at selection time (+1 if hostCopy). */
+  quantity: number;
+  hubLineId: string | null;
+}
+
+export type BookSelectionInput = Omit<BookSelection, "id" | "selectedAt" | "selectedBy" | "hubLineId">;
+
+/** A member's Stripe invoice history (read-only; refunds link out, spec B2). */
+export interface PaymentRecord {
+  id: string;
+  date: string; // YYYY-MM-DD
+  amount: number;
+  status: "succeeded" | "failed" | "refunded";
+  description: string;
+}
+
+// ---------------------------------------------------------------------------
+// Ordering Hub (spec Part C)
+// ---------------------------------------------------------------------------
+
+/** Where an order line was staged from (C2). Restock is deliberately NOT a
+ *  source — it never enters the send/receive lifecycle (C1/C5). */
+export type HubSource = "bookclub" | "events" | "schools" | "customer";
+
+/** Order types that carry their own discount rate (C6). Customer orders use
+ *  the restock/base rate. */
+export type HubOrderType = "restock" | "bookclub" | "events" | "schools";
+
+export type HubLineState = "draft" | "pending" | "ordered" | "arrived";
+
+export interface HubLine {
+  id: string;
+  title: string;
+  isbn: string;
+  quantity: number;
+  publisherId: string | null;
+  imprint: string;
+  rrp: number | null;
+  source: HubSource;
+  /** Human label, e.g. "Book Club — Killer Lines". */
+  sourceLabel: string;
+  /** Originating record id (selection/event/school/order). NOT editable —
+   *  this is what makes arrival write back correctly (C2/C4). */
+  sourceLink: string;
+  /** Trading account. Mandatory before push, no default (C2). */
+  account: Location | null;
+  orderType: HubOrderType;
+  state: HubLineState;
+  /** Groups lines staged together so they review/push as one draft card. */
+  draftKey: string | null;
+  createdAt: string; // ISO
+  sentAt: string | null;
+  sentBy: string;
+  sentMethod: "Email" | "CSV" | "";
+  /** Exact copy of what was sent, stored against the batch (C3). */
+  sentCopy: string;
+  arrivedAt: string | null;
+  log: AuditEntry[];
+}
+
+export type HubLineInput = Omit<
+  HubLine,
+  "id" | "createdAt" | "sentAt" | "sentBy" | "sentMethod" | "sentCopy" | "arrivedAt" | "log" | "state"
+>;
+
+/** Per-order-type discount rates (straight % off RRP — no volume tiers, C6).
+ *  null = no own rate → falls back to restock (the base). */
+export type DiscountRates = {
+  [K in HubOrderType]: number | null;
+};
+
+/**
+ * Reference data: one row per publisher, staff-maintained (C6). Lives with
+ * rep contacts (Events base Publishers table, Imprints as children — reused,
+ * not duplicated). Rates are Publisher × Order Type applying to BOTH
+ * accounts; `accountOverrides` is the rare per-account exception, visually
+ * flagged. Imprints always inherit the parent rate — no imprint override.
+ */
+export interface HubPublisher {
+  id: string;
+  name: string;
+  repName: string;
+  repEmail: string;
+  /** Account numbers are per-account: every publisher holds two (C6). */
+  accountNumbers: Record<Location, string>;
+  imprints: string[];
+  rates: DiscountRates;
+  accountOverrides: Partial<Record<Location, Partial<DiscountRates>>>;
+}
+
+export type HubPublisherInput = Omit<HubPublisher, "id">;
+
+/** Shop-floor restock capture (C5) — decision-support only, never sent by
+ *  the Hub. Lifecycle ends at handed-off-to-Batchline. */
+export interface RestockItem {
+  id: string;
+  title: string;
+  isbn: string;
+  quantity: number;
+  location: Location;
+  by: string;
+  /** Supplier/publisher name for grouping + Settings cadence lookup. */
+  supplier: string;
+  createdAt: string; // ISO
+  handledAt: string | null;
+  handledBy: string;
+}
+
+export type RestockItemInput = Omit<RestockItem, "id" | "createdAt" | "handledAt" | "handledBy">;
+
 export type Role = "staff" | "manager";
 
 export interface SessionUser {

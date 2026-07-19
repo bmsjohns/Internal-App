@@ -15,7 +15,9 @@
   --color-coral: #da4f4a;
   --color-blush: #f5adb0;
   --color-shell: #fbdcdc;
-  --color-navy: #2b4c6f; /* Simply Books venue colour */
+  --color-teal: #378573; /* Simply Books brand colour */
+  --color-teal-deep: #285f52;
+  --color-teal-tint: #e4f0ec;
   --color-ochre: #b0812f; /* status: needs ordering */
   --color-moss: #5f7355; /* status: collected / paid */
   --color-fog: #b8b0a6; /* status: cancelled */
@@ -48,6 +50,12 @@ input::placeholder, textarea::placeholder { color: #a9a196; }
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: var(--tracking-caps);
+}
+
+/* Daily Briefing: the "live" sync dot and new-message chips. */
+@keyframes db-pulse {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.3; }
 }
 
 @keyframes ob-fade {

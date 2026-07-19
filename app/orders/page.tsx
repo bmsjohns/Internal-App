@@ -18,6 +18,7 @@ export default function OrdersQueue() {
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
+  const [remote, setRemote] = useState<Order[]>([]);
 
   useEffect(() => {
     fetch("/api/orders")
@@ -29,17 +30,47 @@ export default function OrdersQueue() {
       .catch((e) => setError(e.message));
   }, []);
 
+  // /api/orders only returns open + recent orders; searching also asks the
+  // server for full-history matches (debounced) and merges them in below.
+  useEffect(() => {
+    const needle = q.trim();
+    setRemote([]);
+    if (needle.length < 2) return;
+    let stale = false;
+    const t = setTimeout(() => {
+      fetch(`/api/orders/search?q=${encodeURIComponent(needle)}`)
+        .then((r) => (r.ok ? r.json() : { orders: [] }))
+        .then((d) => {
+          if (!stale) setRemote(d.orders ?? []);
+        })
+        .catch(() => {});
+    }, 300);
+    return () => {
+      stale = true;
+      clearTimeout(t);
+    };
+  }, [q]);
+
+  const pool = useMemo(() => {
+    if (!orders) return null;
+    if (remote.length === 0) return orders;
+    const seen = new Set(orders.map((o) => o.id));
+    return [...orders, ...remote.filter((o) => !seen.has(o.id))].sort((a, b) =>
+      a.orderDate < b.orderDate ? 1 : -1
+    );
+  }, [orders, remote]);
+
   const filtered = useMemo(() => {
-    if (!orders) return [];
+    if (!pool) return [];
     const needle = q.trim().toLowerCase();
-    return orders.filter((o) => {
+    return pool.filter((o) => {
       if (venue !== "all" && venueKeyOf(o.location) !== venue) return false;
       if (status !== "all" && canonicalStatus(o.status).key !== status) return false;
       if (needle && !`${o.bookTitle} ${o.author} ${o.isbn} ${o.customerName ?? ""}`.toLowerCase().includes(needle))
         return false;
       return true;
     });
-  }, [orders, q, status, venue]);
+  }, [pool, q, status, venue]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();

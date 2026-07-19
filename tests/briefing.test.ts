@@ -1,0 +1,187 @@
+import { describe, expect, it } from "vitest";
+import {
+  addDays,
+  briefingEvents,
+  dateParts,
+  eventVenues,
+  fmtMin,
+  onShiftNow,
+  relLabel,
+  splitEventTime,
+} from "@/lib/briefing";
+import type { ShowEvent } from "@/lib/types";
+
+const show = (over: Partial<ShowEvent>): ShowEvent => ({
+  id: "e1", name: "Event", leadTitle: "", isbn: "", date: "2026-07-18", time: "19:30",
+  venueId: null, venueName: "", location: null, hostId: null, hostName: "",
+  types: [], ages: [], format: "", status: "Confirmed", fromPitchId: null,
+  roles: [], schedule: [], legacyStaffing: [], bookTicket: null, ticketOnly: null,
+  minOrder: null, lumaLink: "", banners: false, callSheet: [], callSheetSent: false,
+  salesReportSent: false, mediaCount: 0, notes: "", createdAt: "",
+  ...over,
+});
+
+describe("briefing time formatting", () => {
+  it("formats minutes the design's compact way", () => {
+    expect(fmtMin(480)).toBe("8am");
+    expect(fmtMin(510)).toBe("8.30am");
+    expect(fmtMin(720)).toBe("12pm");
+    expect(fmtMin(0)).toBe("12am");
+    expect(fmtMin(1380)).toBe("11pm");
+  });
+
+  it("splits event HH:MM into the card's big time + meridiem", () => {
+    expect(splitEventTime("19:30")).toEqual({ time: "7.30", ampm: "pm" });
+    expect(splitEventTime("10:00")).toEqual({ time: "10", ampm: "am" });
+    expect(splitEventTime("")).toEqual({ time: "TBC", ampm: "" });
+  });
+
+  it("parses closing time for the wrap-up reminder", async () => {
+    const { parseCloseMinutes, parseClockToken } = await import("@/lib/briefing");
+    expect(parseClockToken("5.30pm")).toBe(17 * 60 + 30);
+    expect(parseClockToken("11pm")).toBe(23 * 60);
+    expect(parseClockToken("12pm")).toBe(12 * 60);
+    expect(parseClockToken("12am")).toBe(0);
+    expect(parseCloseMinutes("9am – 5.30pm")).toBe(17 * 60 + 30);
+    expect(parseCloseMinutes("8am – 11pm")).toBe(23 * 60);
+    expect(parseCloseMinutes("Closed today")).toBeNull();
+  });
+
+  it("knows who is on shift now", () => {
+    const s = { id: "x", name: "A", role: "", startMin: 540, endMin: 1020 };
+    expect(onShiftNow(s, 539)).toBe(false);
+    expect(onShiftNow(s, 540)).toBe(true);
+    expect(onShiftNow(s, 1020)).toBe(false);
+  });
+});
+
+describe("briefing dates", () => {
+  it("does calendar arithmetic across month ends", () => {
+    expect(addDays("2026-07-31", 1)).toBe("2026-08-01");
+    expect(addDays("2026-01-01", -1)).toBe("2025-12-31");
+  });
+
+  it("labels offsets relative to today", () => {
+    expect(relLabel(0)).toBe("Today");
+    expect(relLabel(1)).toBe("Tomorrow");
+    expect(relLabel(-1)).toBe("Yesterday");
+    expect(relLabel(3)).toBe("In 3 days");
+    expect(relLabel(-2)).toBe("2 days ago");
+  });
+
+  it("derives the hero's date parts", () => {
+    expect(dateParts("2026-07-18")).toMatchObject({ weekday: "Saturday", dm: "18 July", dmShort: "Sat 18 Jul" });
+  });
+});
+
+describe("integration name matching (no-ids rule)", () => {
+  it("finds the Backstage base by exact case-insensitive name", async () => {
+    const { pickBackstageBase } = await import("@/lib/data/briefing-airtable");
+    expect(
+      pickBackstageBase([
+        { id: "app1", name: "Backstage Passes" },
+        { id: "app2", name: " backstage " },
+        { id: "app3", name: "Customer Orders" },
+      ])
+    ).toBe("app2");
+    expect(pickBackstageBase([{ id: "app1", name: "Orders" }])).toBeNull();
+  });
+
+  it("maps Deputy locations to venues by name", async () => {
+    const { venueForLocationName } = await import("@/lib/data/briefing-deputy");
+    expect(venueForLocationName("Prologue Books")).toBe("prologue");
+    expect(venueForLocationName("Weir Mill site")).toBe("prologue");
+    expect(venueForLocationName("Simply Books")).toBe("simply");
+    expect(venueForLocationName("Bramhall shop")).toBe("simply");
+    expect(venueForLocationName("Head Office")).toBeNull();
+  });
+
+  it("lets an explicit Deputy External ID / code win over the name", async () => {
+    const { venueForCompany } = await import("@/lib/data/briefing-deputy");
+    expect(venueForCompany({ ExternalId: "prologue", CompanyName: "Shop 2" })).toBe("prologue");
+    expect(venueForCompany({ Code: "SB", CompanyName: "Shop 1" })).toBe("simply");
+    expect(venueForCompany({ CompanyName: "Simply Books" })).toBe("simply");
+    expect(venueForCompany({ CompanyName: "Warehouse" })).toBeNull();
+  });
+
+  it("composes opening hours and closures for display", async () => {
+    const { formatHours, weekdayOf } = await import("@/lib/data/briefing-hours");
+    expect(weekdayOf("2026-07-18")).toBe("Saturday");
+    expect(formatHours({ Open: "9am", Close: "5.30pm", Note: "Click & collect until 5pm" })).toEqual({
+      hours: "9am – 5.30pm",
+      note: "Click & collect until 5pm",
+    });
+    expect(formatHours({ Closed: true, Note: "Christmas Day" })).toEqual({
+      hours: "Closed today",
+      note: "Christmas Day",
+    });
+    expect(formatHours({ Open: "8am", Close: "1am", Note: "Late — author event" }).hours).toBe("8am – 1am");
+  });
+
+  it("shows a multi-day alert across its whole range, with its level", async () => {
+    const { mockBriefingSource } = await import("@/lib/data/briefing-mock");
+    const posted = await mockBriefingSource.postAlert(
+      "2026-09-01",
+      "Stocktake week — expect gaps on shelves",
+      "simply",
+      "heads-up",
+      "2026-09-03"
+    );
+    expect(posted.level).toBe("heads-up");
+
+    const has = async (d: string) => (await mockBriefingSource.getDay(d)).alerts.some((a) => a.id === posted.id);
+    expect(await has("2026-08-31")).toBe(false); // before the range
+    expect(await has("2026-09-01")).toBe(true); // first day
+    expect(await has("2026-09-03")).toBe(true); // last day (inclusive)
+    expect(await has("2026-09-04")).toBe(false); // after the range
+
+    await mockBriefingSource.dismissAlert("2026-09-02", posted.id);
+    expect(await has("2026-09-02")).toBe(false); // dismiss clears the whole run
+  });
+
+  it("filters Airtable by formatted date, not raw string equality", async () => {
+    const { dateEq } = await import("@/lib/data/briefing-airtable");
+    // The raw-string form (`{Date}='...'`) silently matches nothing; the
+    // formatted form is what actually reads a date field back.
+    expect(dateEq("2026-07-18")).toBe("DATETIME_FORMAT({Date},'YYYY-MM-DD')='2026-07-18'");
+  });
+
+  it("normalises pasted Deputy hostnames", async () => {
+    const { normalizeDeputyHost } = await import("@/lib/data/briefing-deputy");
+    expect(normalizeDeputyHost("8444e614052702.eu.deputy.com/")).toBe("8444e614052702.eu.deputy.com");
+    expect(normalizeDeputyHost("https://x.eu.deputy.com/exec/devapp")).toBe("x.eu.deputy.com");
+    expect(normalizeDeputyHost("  x.na.deputy.com  ")).toBe("x.na.deputy.com");
+  });
+});
+
+describe("events → briefing columns", () => {
+  it("places events by Location, then venue name, else both", () => {
+    expect(eventVenues(show({ location: "Prologue" }))).toEqual(["prologue"]);
+    expect(eventVenues(show({ venueName: "Simply Books — Bramhall" }))).toEqual(["simply"]);
+    expect(eventVenues(show({ venueName: "The Plaza" }))).toEqual(["prologue", "simply"]);
+  });
+
+  it("filters to the selected date and sorts by time", () => {
+    const cols = briefingEvents(
+      [
+        show({ id: "late", time: "19:30", venueName: "Prologue" }),
+        show({ id: "early", time: "09:00", venueName: "Prologue" }),
+        show({ id: "other-day", date: "2026-07-19", venueName: "Prologue" }),
+      ],
+      "2026-07-18"
+    );
+    expect(cols.prologue.map((e) => e.id)).toEqual(["early", "late"]);
+    expect(cols.simply).toEqual([]);
+  });
+
+  it("prefers structured roles for the staff line", () => {
+    const e = show({
+      roles: [
+        { id: "r1", phase: "pre", name: "Set-up", staff: [{ id: "a", name: "Amara" }] },
+        { id: "r2", phase: "during", name: "Bar", staff: [{ id: "a", name: "Amara" }, { id: "j", name: "Jack" }] },
+      ],
+      legacyStaffing: ["Ignored"],
+    });
+    expect(briefingEvents([e], "2026-07-18").prologue[0]?.staff ?? briefingEvents([e], "2026-07-18").simply[0].staff).toBe("Amara, Jack");
+  });
+});

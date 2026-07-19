@@ -1,9 +1,11 @@
-# Order Book — internal ops platform
+# Backstage — internal ops platform
 
 Internal ops platform for **Simply Books** (Bramhall) and **Prologue Books**
-(Weir Mill, Stockport). Modules so far: **Customer Orders** (V3) and **Events
-Phase 1: Pitching** (see §Events below). Next.js 15 (App Router) · Clerk ·
-Airtable · Tailwind 4, deployed on Vercel.
+(Weir Mill, Stockport) — formerly "Order Book", renamed **Backstage** now it
+spans more than orders. Modules so far: **Daily Briefing** (the landing
+page — see §Daily Briefing), **Customer Orders** (V3) and **Events Phases
+1–2** (see §Events below). Next.js 15 (App Router) · Clerk · Airtable ·
+Tailwind 4, deployed on Vercel.
 
 ## Running locally
 
@@ -351,6 +353,147 @@ the running-order/staffing editors are read-only with a notice (mock mode
 is fully editable). `Date and Time` maps to the app's date + time in
 **Europe/London** both ways, so 7.30pm stays 7.30pm wherever the server runs.
 
+## Daily Briefing (default landing page)
+
+Built from `daily-briefing-spec.md` + the Claude Design file
+**"Daily Briefing.dc.html"** (same design project as V2). Where the design
+went beyond the spec — urgent alerts with in-page posting, a celebrations
+band, an Overview/Full-day detail toggle, per-venue stat tiles and opening
+hours, collapsible wrap-up bands, a Slack new-message banner — the design
+was treated as authoritative and built as drawn.
+
+- **Route**: `/briefing`, the default redirect from `/`. Visible to every
+  logged-in user (spec §9 default — no extra permission).
+- **Layout**: two brand columns (Prologue terracotta / Simply Books teal
+  `#378573`), row-aligned on desktop, stacked one-venue-at-a-time on
+  mobile. Location toggle shares the sidebar's venue switcher (persisted);
+  the Detail toggle persists per device (`db-view`).
+- **Data seam**: `lib/data/briefing*` — same pattern as Orders/Events. The
+  mock supplies everything until integrations are configured; Deputy
+  (roster + tasks, 10-min cache with "as of HH.MM") and Slack (read-only
+  day-scoped chatter) overlay per-section via the env vars in
+  `.env.example`. **Both adapters are written but unverified** — they need
+  a Deputy permanent token and a Slack bot invited to `#pro-on-shift` /
+  `#sb-on-shift`, which only Ben can provision (spec §2/§8). Field names
+  should be confirmed against the live Deputy account on first connect
+  (spec §9).
+- **Weather**: live Open-Meteo (free, keyless), Stockport, 30-min cache;
+  the pill simply hides if the forecast is unavailable.
+- **Events**: read through the existing Events data source and filtered to
+  the selected date server-side (`/api/briefing`), so briefing readers
+  don't need `events:view`. Cards link into `/events/[id]` (which still
+  enforces its own permission).
+- **Wrap-ups + urgent alerts persist to the "Backstage" Airtable base**
+  (general-purpose base for app features that need storage outside the
+  Orders/Events bases; tables `Briefing Wrap-ups` and `Briefing Alerts` —
+  schema in `lib/data/briefing-airtable.ts`). The base is discovered **by
+  name** through the meta API — no base-id env var per base (Ben's rule).
+  It switches on once `AIRTABLE_API_KEY` can see a base called
+  "Backstage" (add it to the token's access list; the token also needs
+  the `schema.bases:read` scope). `BACKSTAGE_AIRTABLE_BASE_ID` exists
+  only as an override. Until reachable, wrap-ups/alerts fall back to
+  in-memory mock state (resets on restart; not durable on Vercel).
+  Alert dismissal flags `Dismissed` rather than deleting, so the base
+  keeps an audit trail. Deputy→venue mapping likewise happens by
+  location *name* (Prologue/Weir Mill, Simply/Bramhall), with
+  `DEPUTY_LOCATION_ID_*` as numeric overrides only if a name mismatches.
+- **Deliberately not built** (spec §4/§7): no parallel in-app task system
+  (Deputy's tasks or nothing), and no auto-post of wrap-ups to Slack —
+  whether the Slack post continues is an open question below.
+- **Opening hours** come from the Backstage base too — a regular weekly
+  pattern (`Opening Hours`: venue × weekday, with an Open/Close/Closed +
+  note) plus a `Hours Overrides` table for date-specific exceptions (a
+  late event night, or a full closure like Christmas; venue "Both"
+  applies to both). Resolution: override for the date wins, else that
+  weekday's regular row, else the built-in mock fallback. Editable in the
+  base, no deploy needed. Logic in `lib/data/briefing-hours.ts`.
+- Staff **milestones/birthdays** (§6) currently come from mock data; the
+  Deputy Employee fields (start date / DOB) need checking before wiring
+  them live, plus the privacy note in the spec (show "birthday today",
+  never the full DOB).
+
+## Book Clubs + Ordering Hub (Jul 2026)
+
+Built from `book-clubs-ordering-hub-COMBINED.md` + the Claude Design file
+**"Book Clubs & Ordering Hub.dc.html"** (same design project). Two coupled
+modules: **Regular Events — Book Clubs Phase 1** (clubs, members, Stripe
+subscriptions, monthly picks) and the **Ordering Hub** (staging → pending
+batches → send → arrival, plus decision-support restock). Both sit in the
+sidebar as **groups with a sub-menu** (Ben's ask): *Book clubs* →
+Clubs / Members / Failed payments; *Ordering* → Staging / Pending queue /
+Outstanding / Restock / Publishers, with live badge counts
+(`/api/nav-counts`).
+
+- **Shared list component** (`components/DataTable.tsx`) carries the spec's
+  A2 data bar for every list view: multi-criteria chip filters that stay
+  visible and clear easily, sortable columns with indicators, partial-match
+  search, per-view persistence (localStorage), CSV export of the filtered
+  rows, a row cap with "Show all" for performance, and a card layout below
+  `md` instead of horizontal scrolling.
+- **Data seams** follow the house pattern: `lib/data/clubs-*` and
+  `lib/data/hub-*` (interface / mock / airtable), switched by
+  `DATA_SOURCE`. Mock mode is fully self-contained — **no Airtable, no
+  Stripe** — with deterministic seed data. The Airtable implementations
+  (19 Jul 2026) map onto the **live "Book Clubs" base** (clubs / the
+  Stripe-synced Members subscription rows / Book Orders / Publishers) plus
+  the new **Hub Lines + Restock** tables in the Backstage base — the one
+  central ordering table Ben chose over per-module order tables. Applied
+  schema changes (all additive), live-base mapping quirks and remaining
+  rollout steps: [docs/clubs-hub-migration.md](docs/clubs-hub-migration.md).
+  ⚠️ Still needed: the Book Clubs base on the app token's access list, and
+  the Stripe keys (Ben, in progress).
+- **Members are standalone** from Customers (spec B1) — no linking or
+  matching anywhere, deliberately. In airtable mode a "member" is derived by
+  grouping the Stripe-synced subscription rows by Customer ID.
+- **Stripe** (`lib/stripe.ts`, raw REST, no new dependency): reads
+  (subscription status, invoice history — refunds view-only, issued in the
+  dashboard) and writes (cancel immediate/period-end, native pause/resume,
+  and **move-between-clubs as one guided flow**: cancel sub A + create sub
+  B on the same customer). All writes are logged who/when on the
+  membership. `/api/stripe/webhook` (HMAC-verified) keeps `Pay Status` live
+  so **Failed payments** — its own nav item — never needs a Stripe login,
+  and the Daily Briefing shows a "needs attention" chip for it.
+- **Book selection → hub** (spec B4): one book per club per month;
+  quantity is the exact active-member count with a +1 host-copy checkbox,
+  computed server-side. Saving upserts a **draft in the hub** tagged
+  `Book Club — <name>`; the selection stores only the hub line id and
+  *reflects* its state (draft → pending → ordered → arrived) — status
+  lives in one place.
+- **Hub lifecycle** (spec C): nothing enters automatically — every source
+  stages a draft (editable inline quantities, mandatory account with no
+  default, RRP/discount/cost per line + batch total). Drafts persist
+  forever; 7+ days unpushed = stale flag in Staging and on the briefing
+  (`STALE_DRAFT_DAYS`, TBC with Ben). Deleting a draft is logged and never
+  touches the originating record. The pending queue auto-batches by
+  **publisher × account** (sources merge within a pairing — the point of
+  the hub); **send is gated by `hub:send`** and shown locked, not hidden,
+  to everyone else. Email path opens the user's mail app with the reviewed
+  body and stores that exact copy against the batch; CSV download marks
+  sent the same way. Sending is refused while the matching account number
+  is missing. The email path opens **Gmail compose** in a new tab (the team
+  sends from personal Gmail accounts) with the reviewed body pre-filled.
+  Arrival is a single confirm (no partial receipts), writes back to customer
+  orders ("Already In Stock" + status log) and to Book Orders ("Publisher
+  Contacted" on send, "Received" on arrival) via the preserved source link,
+  and Outstanding lists what to chase, sortable by days out.
+- **Restock** (spec C5) is decision-support only: phone-first capture bar
+  (barcode → ISBN lookup autofills title, publisher suggests the
+  supplier), grouped by supplier with the Settings cadence badge, "mark
+  handled" once ordered in **Batchline**. Never sent by the hub, no arrival
+  tracking.
+- **Discounts** (spec C6): straight % off RRP, Publisher × Order Type,
+  restock as the base/fallback (customer orders use it), rare per-account
+  override highlighted in the Publishers screen, imprints always inherit.
+  Stored on the **existing Publishers table in the Events base** (rep
+  contacts reused, not duplicated) — staff-editable behind
+  `settings:manage`, never hardcoded.
+- **Permissions** (spec C7): `hub:view` default for all roles (staging,
+  arrivals, restock stay friction-free), `hub:send` manager-default,
+  `clubs:view`/`clubs:manage` **explicit-grant only** for now — open
+  question on CRM visibility flagged for Ben in the migration doc.
+- **Venue tinting**: the whole surface re-tints to the venue being viewed
+  (teal for Simply Books, terracotta otherwise), matching the design file.
+
 ## Open questions for Ben
 
 1. **One visual language or two?** The app is Prologue-branded overall with
@@ -362,3 +505,14 @@ is fully editable). `Date and Time` maps to the app's date + time in
    (lib/config.ts) is the right definition of "needs ordering" for the
    end-of-day list.
 4. Vercel Hobby vs Pro (licensing note above).
+5. **Daily Briefing setup** (all blocked on Ben): a Deputy permanent token
+   + the Deputy location/OperationalUnit ids for each venue; a Slack bot
+   token invited to `#pro-on-shift` and `#sb-on-shift`; and where wrap-ups
+   / urgent alerts should persist (suggest a small Airtable table — see
+   §Daily Briefing).
+6. **Wrap-up → Slack**: keep the manual Slack post going, replace it with
+   the in-app wrap-up, or run both during a transition (spec §7)? And is
+   the wrap-up per-venue (as built, matching the design) or shared?
+7. **Simply Books venue colour** app-wide changed from the old navy
+   stand-in to the brand teal `#378573` (spec §0) — flag if any screen
+   looks off with it.

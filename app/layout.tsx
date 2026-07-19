@@ -19,10 +19,10 @@ const karla = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Order Book",
-  description: "Customer orders for Simply Books & Prologue",
+  title: "Backstage",
+  description: "Internal ops platform for Simply Books & Prologue",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "Order Book", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Backstage", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

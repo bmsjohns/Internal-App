@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { ClerkProvider } from "@clerk/nextjs";
 import { clerkEnabled, getSessionUser } from "@/lib/auth";
-import Sidebar from "@/components/Sidebar";
+import AppShell from "@/components/AppShell";
 import { VenueProvider } from "@/components/VenueContext";
 import "./globals.css";
 
@@ -35,10 +35,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${newSpirit.variable} ${karla.variable}`}>
       <body className="min-h-screen">
         <VenueProvider>
-          <div className="flex min-h-screen">
-            <Sidebar user={user} />
-            <main className="min-w-0 flex-1 bg-cream">{children}</main>
-          </div>
+          <AppShell user={user}>{children}</AppShell>
         </VenueProvider>
       </body>
     </html>

@@ -29,10 +29,13 @@ the real APIs** until Ben provisions keys — expect a shakedown session
 
 ## Issues accepted with the 15-minute cadence
 
-- **Vercel plan**: `*/15` cron granularity needs a Pro team plan (Hobby
-  crons are daily-only). The backstage project is on a team — confirm it's
-  Pro; if not, the self-heal path alone still delivers ≤15-min freshness
-  for anyone actually looking, and the cron just runs less often.
+- **Vercel plan**: CONFIRMED Hobby (20 Jul 2026) — Hobby rejects sub-daily
+  cron schedules at deploy time ("Hobby accounts are limited to daily Cron
+  Jobs"), so vercel.json runs the sync nightly (02:30 UTC) as the durable
+  rollup writer. The ≤15-minute freshness contract is carried entirely by
+  the getSales() self-heal path, which syncs inline whenever a viewer loads
+  the dashboard and the last sync is stale. Upgrading to Pro later means
+  just changing the schedule back to `*/15 * * * *`.
 - "Today" figures can additionally lag by Square/Stripe settlement timing —
   the header's "Synced HH.MM" chip is the honest timestamp.
 - Airtable write volume is trivial (≤4 rows per run, 5 rps limit intact).

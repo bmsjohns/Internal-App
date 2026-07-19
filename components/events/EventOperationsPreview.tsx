@@ -8,7 +8,7 @@ import type {
   EventTaskStatus,
   LumaPreview,
 } from "@/lib/event-operations";
-import { readinessSummary } from "@/lib/event-operations";
+import { eventCostTotal, readinessSummary } from "@/lib/event-operations";
 import { panelCls, panelHead } from "@/components/form";
 
 const rust = "#AD3B28";
@@ -185,8 +185,17 @@ export function EventTicketsTab({ initial }: { initial: LumaPreview }) {
       <div className="max-w-[760px] rounded-[14px] border border-dashed border-cream-2 bg-white px-6 py-12 text-center sm:px-12">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-shell text-rust">{icon(ICON_TICKET, 24)}</div>
         <h2 className="mb-2 font-display text-2xl">Connect this event to Luma</h2>
-        <p className="mx-auto mb-5 max-w-[470px] text-[13.5px] leading-relaxed text-stone">Link an existing Luma event to bring registrations, ticket types, waitlist and check-in activity into Backstage automatically.</p>
-        <button className="cursor-not-allowed rounded-md bg-rust px-5 py-2.5 text-[13px] font-semibold text-cream opacity-85" title="Disabled in safe preview mode">Search Luma events</button>
+        <p className="mx-auto mb-5 max-w-[500px] text-[13.5px] leading-relaxed text-stone">Choose the target calendar, then either link an existing Luma event or explicitly push this Backstage event up to Luma.</p>
+        <div className="mx-auto mb-4 max-w-[360px] rounded-lg border border-cream-2 bg-cream px-3 py-2.5 text-left">
+          <label className="eyebrow mb-1.5 block text-stone" htmlFor="preview-luma-calendar">Target calendar</label>
+          <select id="preview-luma-calendar" disabled value={luma.calendar.id} className="w-full bg-transparent text-[13px] font-semibold text-charcoal outline-none">
+            {luma.availableCalendars.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendar.name}{calendar.active ? " · connected" : " · future"}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-col justify-center gap-2 sm:flex-row">
+          <button className="cursor-not-allowed rounded-md border border-rust bg-white px-5 py-2.5 text-[13px] font-semibold text-rust opacity-85" title="Disabled in safe preview mode">Link existing event</button>
+          <button className="cursor-not-allowed rounded-md bg-rust px-5 py-2.5 text-[13px] font-semibold text-cream opacity-85" title="Disabled in safe preview mode">Push event to Luma</button>
+        </div>
         <div className="mt-3 text-[11.5px] text-stone">Connection actions are disabled on this preview branch.</div>
       </div>
     );
@@ -198,8 +207,8 @@ export function EventTicketsTab({ initial }: { initial: LumaPreview }) {
         <div className="flex items-center gap-3">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5F735518] text-[#5F7355]">{icon('<path d="M8 12.5l2.5 2.5L16 9"/><circle cx="12" cy="12" r="9"/>', 18)}</span>
           <div>
-            <div className="text-[13px] font-semibold text-charcoal">Connected to Luma · {luma.eventId}</div>
-            <div className="mt-0.5 text-[11.5px] text-stone">Mock webhook feed · synced {relativeTime(luma.lastSyncedAt)}</div>
+            <div className="text-[13px] font-semibold text-charcoal">Connected to {luma.calendar.name} · {luma.eventId}</div>
+            <div className="mt-0.5 text-[11.5px] text-stone">Calendar-aware mock feed · synced {relativeTime(luma.lastSyncedAt)}</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -260,7 +269,7 @@ export function EventTicketsTab({ initial }: { initial: LumaPreview }) {
           <HealthRow label="Pending" value={luma.pending} color={gold} />
           <HealthRow label="Waitlisted" value={luma.waitlist} color={rust} />
           <HealthRow label="Declined" value={luma.declined} color="#8C857C" />
-          <div className="mt-4 rounded-lg bg-cream px-3.5 py-3 text-[11.5px] leading-relaxed text-stone">Guest names are not persisted in this preview. The production integration can fetch current details from Luma only when check-in requires them.</div>
+          <div className="mt-4 rounded-lg bg-cream px-3.5 py-3 text-[11.5px] leading-relaxed text-stone">Backstage stores aggregates, not guest names. A future identity match could link a Luma registration to an existing customer profile without creating a second customer record.</div>
         </section>
       </div>
     </div>
@@ -276,10 +285,11 @@ export function EventStockTab({ stock, luma }: { stock: EventStockPreview[]; lum
   const coverage = totalReserved ? Math.round((totalReceived / totalReserved) * 100) : 100;
   return (
     <div className="flex max-w-[1060px] flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MiniMetric label="Ticket-linked demand" value={String(totalReserved)} detail="Book + ticket reservations" tone="rust" />
-        <MiniMetric label="Copies received" value={String(totalReceived)} detail={`${stock.reduce((sum, row) => sum + row.ordered, 0)} ordered`} tone="green" />
-        <MiniMetric label="Demand coverage" value={`${coverage}%`} detail={coverage >= 100 ? "Ticket commitments covered" : `${totalReserved - totalReceived} copies at risk`} tone={coverage >= 100 ? "green" : "gold"} />
+        <MiniMetric label="Recommended order" value={String(stock.reduce((sum, row) => sum + row.recommendedOrder, 0))} detail="Reservations + walk-up + buffer" tone="gold" />
+        <MiniMetric label="Planned overage" value={String(stock.reduce((sum, row) => sum + row.walkUpForecast + row.buffer, 0))} detail="For walk-ups and on-night sales" tone="stone" />
+        <MiniMetric label="Copies received" value={String(totalReceived)} detail={`${coverage}% of reserved demand covered`} tone={coverage >= 100 ? "green" : "gold"} />
       </div>
       <div className="overflow-hidden rounded-[11px] border border-cream-2 bg-white">
         <div className="flex items-center justify-between border-b border-cream-2 px-5 py-4">
@@ -297,6 +307,9 @@ export function EventStockTab({ stock, luma }: { stock: EventStockPreview[]; lum
                 <div key={String(label)} className="rounded-lg bg-cream px-3 py-3 text-center"><div className="font-display text-xl tabular-nums">{value}</div><div className="mt-0.5 text-[10px] uppercase tracking-[.09em] text-stone">{label}</div></div>
               ))}
             </div>
+            <div className="mt-4 rounded-lg border border-[#B0812F33] bg-[#B0812F0D] px-3.5 py-3 text-[12px] text-charcoal">
+              <strong>{row.recommendedOrder} recommended</strong> = {row.reserved} ticket reservations + {row.walkUpForecast} forecast walk-up sales + {row.buffer} contingency copies.
+            </div>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-cream-2 pt-3 text-[11.5px] text-stone"><span>Expected {formatLongDate(row.expectedDate)}</span><span>Luma demand: {luma.ticketTypes.find((ticket) => ticket.id === "book-ticket")?.issued ?? 0} book-inclusive tickets</span></div>
           </div>
         ))}
@@ -307,9 +320,11 @@ export function EventStockTab({ stock, luma }: { stock: EventStockPreview[]; lum
 
 export function EventResultsTab({ operations }: { operations: EventOperationsPreview }) {
   const { results, luma, stage } = operations;
+  const [costs, setCosts] = useState(results.costs);
   const complete = stage === "Complete" || stage === "Reconciliation";
   const revenue = results.ticketRevenue + results.bookRevenue;
-  const contribution = revenue - results.directCosts;
+  const directCosts = eventCostTotal(costs);
+  const contribution = revenue - directCosts;
   if (!complete) {
     return (
       <div className="max-w-[900px]">
@@ -328,8 +343,37 @@ export function EventResultsTab({ operations }: { operations: EventOperationsPre
         <MetricCard label="Attendance" value={results.attendance + results.walkIns} detail={`${results.noShows} no-shows · ${results.walkIns} walk-ins`} accent={rust} />
         <MetricCard label="Books sold" value={results.booksSold} detail={`${results.attendance ? (results.booksSold / results.attendance).toFixed(2) : "0"} per attendee`} accent={gold} />
         <MetricCard label="Total revenue" value={money(revenue)} detail={`${money(results.bookRevenue)} from books`} accent={green} />
-        <MetricCard label="Contribution" value={money(contribution)} detail={`After ${money(results.directCosts)} direct costs`} accent="#3D6670" />
+        <MetricCard label="Contribution" value={money(contribution)} detail={`After ${money(directCosts)} optional costs`} accent="#3D6670" />
       </div>
+      <section className={panelCls}>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+          <div><span className={panelHead}>Optional cost breakdown</span><p className="m-0 text-[12px] text-stone">Add only the costs relevant to this event. Values stay in this browser in preview mode.</p></div>
+          <div className="text-right"><div className="eyebrow text-stone">Total costs</div><div className="font-display text-xl">{money(directCosts)}</div></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {([
+            ["paymentFees", "Payment fees"],
+            ["vat", "VAT"],
+            ["staff", "Staff"],
+            ["venue", "Venue"],
+            ["host", "Host"],
+            ["other", "Other"],
+          ] as const).map(([key, label]) => (
+            <label key={key} className="block">
+              <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[.08em] text-stone">{label}</span>
+              <span className="flex items-center rounded-md border border-cream-2 bg-cream px-2.5 focus-within:border-rust">
+                <span className="text-xs text-stone">£</span>
+                <input
+                  inputMode="decimal"
+                  value={costs[key] ?? ""}
+                  onChange={(event) => setCosts((current) => ({ ...current, [key]: event.target.value === "" ? null : Math.max(0, Number(event.target.value) || 0) }))}
+                  className="min-w-0 flex-1 bg-transparent px-1.5 py-2.5 text-right text-[13px] font-semibold outline-none"
+                />
+              </span>
+            </label>
+          ))}
+        </div>
+      </section>
       <div className="grid items-start gap-4 lg:grid-cols-[1.25fr_.75fr]">
         <section className={panelCls}>
           <span className={panelHead}>Event retrospective</span>

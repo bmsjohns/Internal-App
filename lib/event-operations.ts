@@ -25,10 +25,20 @@ export interface LumaTicketTypePreview {
   color: string;
 }
 
+export interface LumaCalendarPreview {
+  id: string;
+  name: string;
+  slug: string;
+  location: "All venues" | "Simply Books" | "Prologue";
+  active: boolean;
+}
+
 export interface LumaPreview {
   connected: boolean;
   eventId: string;
   eventUrl: string;
+  calendar: LumaCalendarPreview;
+  availableCalendars: LumaCalendarPreview[];
   status: "on_sale" | "sold_out" | "draft" | "ended";
   capacity: number;
   approved: number;
@@ -50,6 +60,9 @@ export interface EventStockPreview {
   ordered: number;
   received: number;
   reserved: number;
+  walkUpForecast: number;
+  buffer: number;
+  recommendedOrder: number;
   sold: number;
   returned: number;
   expectedDate: string;
@@ -63,7 +76,14 @@ export interface EventResultPreview {
   booksSold: number;
   ticketRevenue: number;
   bookRevenue: number;
-  directCosts: number;
+  costs: {
+    paymentFees: number | null;
+    vat: number | null;
+    staff: number | null;
+    venue: number | null;
+    host: number | null;
+    other: number | null;
+  };
   retrospective: string;
 }
 
@@ -110,15 +130,15 @@ function buildTasks(event: ShowEvent): EventTaskPreview[] {
   const days = daysUntil(event.date);
   const confirmed = event.status.toLowerCase() === "confirmed";
   const rows: Omit<EventTaskPreview, "id" | "status">[] = [
-    { title: "Confirm venue, capacity & access", category: "Venue", owner: "Ben Johns", dueDate: dayOffset(event.date, -42), priority: "high" },
+    { title: "Confirm venue, capacity & access", category: "Venue", owner: "Charlotte Moore", dueDate: dayOffset(event.date, -42), priority: "high" },
     { title: "Publish Luma event page", category: "Event", owner: "Charlotte Moore", dueDate: dayOffset(event.date, -35), priority: "high" },
     { title: "Approve artwork & campaign copy", category: "Marketing", owner: "Charlotte Moore", dueDate: dayOffset(event.date, -28), priority: "normal" },
     { title: "Place lead-title stock order", category: "Stock", owner: "Lynsey Thomas", dueDate: dayOffset(event.date, -21), priority: "high" },
     { title: "Confirm host and event team", category: "People", owner: "Ben Johns", dueDate: dayOffset(event.date, -14), priority: "normal" },
     { title: "Check ticket pace and marketing push", category: "Marketing", owner: "Charlotte Moore", dueDate: dayOffset(event.date, -10), priority: "normal" },
     { title: "Confirm stock delivery & signing set-up", category: "Stock", owner: "Lynsey Thomas", dueDate: dayOffset(event.date, -5), priority: "high" },
-    { title: "Send final call sheet", category: "People", owner: "Ben Johns", dueDate: dayOffset(event.date, -2), priority: "high" },
-    { title: "Reconcile attendance, stock and sales", category: "Follow-up", owner: "Ben Johns", dueDate: dayOffset(event.date, 1), priority: "high" },
+    { title: "Send final call sheet", category: "People", owner: "Charlotte Moore", dueDate: dayOffset(event.date, -2), priority: "high" },
+    { title: "Reconcile attendance, stock and sales", category: "Follow-up", owner: "Charlotte Moore", dueDate: dayOffset(event.date, 1), priority: "high" },
     { title: "Send publisher sales report", category: "Follow-up", owner: "Lynsey Thomas", dueDate: dayOffset(event.date, 3), priority: "normal" },
   ];
   return rows.map((row, index) => ({ ...row, id: `preview-task-${index + 1}`, status: taskStatus(index, days, confirmed) }));
@@ -129,11 +149,20 @@ function buildLuma(event: ShowEvent): LumaPreview {
   const seed = hash(event.id || event.name);
   const days = daysUntil(event.date);
   const capacity = event.bookTicket || event.ticketOnly || (event.venueName.includes("café") ? 45 : event.venueName.includes("Simply") ? 60 : 150);
+  const calendars: LumaCalendarPreview[] = [
+    { id: "cal-backstage", name: "Backstage Events", slug: "backstage-events", location: "All venues", active: true },
+    { id: "cal-simply", name: "Simply Books Events", slug: "simply-books", location: "Simply Books", active: false },
+    { id: "cal-prologue", name: "Prologue Events", slug: "prologue", location: "Prologue", active: false },
+  ];
+  const preferredLocation = event.location ?? (event.venueName.includes("Simply") ? "Simply Books" : event.venueName.includes("Prologue") ? "Prologue" : "All venues");
+  const calendar = calendars.find((candidate) => candidate.active && (candidate.location === preferredLocation || candidate.location === "All venues")) ?? calendars[0];
   if (!linked) {
     return {
       connected: false,
       eventId: "",
       eventUrl: "",
+      calendar,
+      availableCalendars: calendars,
       status: "draft",
       capacity,
       approved: 0,
@@ -160,6 +189,8 @@ function buildLuma(event: ShowEvent): LumaPreview {
     connected: true,
     eventId: `evt-${(event.id || String(seed)).replace(/^ev-/, "")}`,
     eventUrl: event.lumaLink,
+    calendar,
+    availableCalendars: calendars,
     status: days < 0 ? "ended" : approved >= capacity ? "sold_out" : "on_sale",
     capacity,
     approved,
@@ -196,7 +227,12 @@ export function getEventOperationsPreview(event: ShowEvent): EventOperationsPrev
   const luma = buildLuma(event);
   const tasks = buildTasks(event);
   const days = daysUntil(event.date);
-  const ordered = Math.max(event.minOrder ?? 0, luma.ticketTypes.find((ticket) => ticket.id === "book-ticket")?.issued ?? 0) + 12;
+  const reserved = luma.ticketTypes.find((ticket) => ticket.id === "book-ticket")?.issued ?? 0;
+  const ticketOnlyDemand = luma.ticketTypes.filter((ticket) => ticket.id !== "book-ticket").reduce((sum, ticket) => sum + ticket.issued, 0);
+  const walkUpForecast = Math.max(6, Math.round(ticketOnlyDemand * 0.3));
+  const buffer = Math.max(6, Math.round(luma.capacity * 0.06));
+  const recommendedOrder = Math.max(event.minOrder ?? 0, reserved + walkUpForecast + buffer);
+  const ordered = recommendedOrder;
   const received = days <= 5 ? ordered : Math.max(0, ordered - 20);
   const sold = days < 0 ? Math.min(received, Math.round(luma.checkedIn * 0.62)) : 0;
   const stock: EventStockPreview[] = event.leadTitle
@@ -208,7 +244,10 @@ export function getEventOperationsPreview(event: ShowEvent): EventOperationsPrev
         minimum: event.minOrder ?? 0,
         ordered,
         received,
-        reserved: luma.ticketTypes.find((ticket) => ticket.id === "book-ticket")?.issued ?? 0,
+        reserved,
+        walkUpForecast,
+        buffer,
+        recommendedOrder,
         sold,
         returned: days < -3 ? Math.max(0, received - sold - 8) : 0,
         expectedDate: dayOffset(event.date, -6),
@@ -230,10 +269,21 @@ export function getEventOperationsPreview(event: ShowEvent): EventOperationsPrev
       booksSold: sold,
       ticketRevenue,
       bookRevenue: sold * 20,
-      directCosts: days < 0 ? 620 : 0,
+      costs: {
+        paymentFees: days < 0 ? 18 : null,
+        vat: days < 0 ? 62 : null,
+        staff: days < 0 ? 240 : null,
+        venue: days < 0 ? 180 : null,
+        host: days < 0 ? 120 : null,
+        other: null,
+      },
       retrospective: days < 0 ? "Strong audience questions and a busy signing. Add a second card reader next time and open doors ten minutes earlier." : "",
     },
   };
+}
+
+export function eventCostTotal(costs: EventResultPreview["costs"]): number {
+  return Object.values(costs).reduce<number>((sum, value) => sum + (value ?? 0), 0);
 }
 
 export function readinessSummary(tasks: EventTaskPreview[], today = new Date()): { done: number; total: number; overdue: number; percent: number } {

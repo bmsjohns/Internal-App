@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getEventOperationsPreview, readinessSummary } from "@/lib/event-operations";
+import { eventCostTotal, getEventOperationsPreview, readinessSummary } from "@/lib/event-operations";
 import type { ShowEvent } from "@/lib/types";
 
 const event = (patch: Partial<ShowEvent> = {}): ShowEvent => ({
@@ -44,9 +44,13 @@ describe("event operations preview", () => {
 
     expect(first.mode).toBe("preview");
     expect(first.luma.connected).toBe(true);
+    expect(first.luma.availableCalendars).toHaveLength(3);
+    expect(first.luma.calendar.active).toBe(true);
     expect(first.luma.approved).toBe(second.luma.approved);
     expect(first.tasks).toHaveLength(10);
-    expect(first.stock[0]).toMatchObject({ title: "The Preview Book", isbn: "9780000000001" });
+    expect(first.stock[0]).toMatchObject({ title: "The Preview Book", isbn: "9780000000001", reserved: expect.any(Number) });
+    expect(first.stock[0].recommendedOrder).toBeGreaterThanOrEqual(first.stock[0].reserved + first.stock[0].walkUpForecast + first.stock[0].buffer);
+    expect(first.stock[0].recommendedOrder).toBeGreaterThanOrEqual(40);
     expect(input).toEqual(event());
   });
 
@@ -67,5 +71,9 @@ describe("event operations preview", () => {
 
     expect(summary).toMatchObject({ done: 4, total: 10, percent: 40 });
     expect(summary.overdue).toBeGreaterThan(0);
+  });
+
+  it("totals only the optional event costs that are present", () => {
+    expect(eventCostTotal({ paymentFees: 18, vat: 62, staff: 240, venue: null, host: 120, other: null })).toBe(440);
   });
 });

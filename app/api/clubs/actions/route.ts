@@ -8,14 +8,14 @@ import { getClubsDataSource } from "@/lib/data/clubs";
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(user, "clubs:manage")) {
-    return NextResponse.json({ error: "Managing subscriptions needs the clubs:manage permission" }, { status: 403 });
-  }
   const body = await req.json();
   const { action, membershipId } = body ?? {};
   if (!membershipId) return NextResponse.json({ error: "membershipId is required" }, { status: 400 });
   const src = getClubsDataSource();
   try {
+    const membership = (await src.listMemberships()).find((item) => item.id === membershipId);
+    const club = membership ? await src.getClub(membership.clubId) : null;
+    if (!club || !can(user, "clubs.stripe", club.location)) return NextResponse.json({ error: "Stripe actions have not been granted for this location" }, { status: 403 });
     if (action === "cancel") {
       const when = body.when === "now" ? "now" : "period_end";
       return NextResponse.json({ membership: await src.cancelMembership(membershipId, when, user.name) });

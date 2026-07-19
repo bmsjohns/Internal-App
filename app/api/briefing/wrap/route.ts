@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 import { getBriefingSource } from "@/lib/data/briefing";
 
 // Spec §7 v1: whoever compiles the wrap-up writes it here, saved against the
@@ -11,6 +11,8 @@ export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { date, venue, headline, body, draft } = await req.json();
+  const location = venue === "simply" ? "Simply Books" : "Prologue";
+  if (!can(user, "briefing.view", location)) return NextResponse.json({ error: "No briefing access at this location" }, { status: 403 });
   if (
     typeof date !== "string" ||
     !["prologue", "simply"].includes(venue) ||

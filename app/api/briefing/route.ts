@@ -13,6 +13,7 @@ import { briefingEvents, todayLondon } from "@/lib/briefing";
 export async function GET(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(user, "briefing.view")) return NextResponse.json({ error: "No briefing access" }, { status: 403 });
 
   const date = req.nextUrl.searchParams.get("date") || todayLondon();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
   ]);
   // Posting urgent alerts is manager-only (§ access). The client hides the
   // control accordingly; the POST route enforces it server-side too.
-  const viewer = { canPostAlert: user.role === "manager" };
+  const viewer = { canPostAlert: can(user, "briefing.alerts.manage") };
 
   // Book Clubs / Ordering Hub attention flags (specs B3 + C2): failed
   // payments and stale drafts surface here so nobody has to remember to
@@ -35,11 +36,13 @@ export async function GET(req: NextRequest) {
   const opsFlags = { failedPayments: 0, staleDrafts: 0, canClubs: can(user, "clubs:view"), canHub: can(user, "hub:view") };
   try {
     if (opsFlags.canClubs) {
-      const memberships = await getClubsDataSource().listMemberships();
-      opsFlags.failedPayments = memberships.filter((s) => s.status !== "cancelled" && s.payStatus !== "ok").length;
+      const clubsSource = getClubsDataSource();
+      const [clubs, memberships] = await Promise.all([clubsSource.listClubs(), clubsSource.listMemberships()]);
+      const visibleClubIds = new Set(clubs.filter((club) => can(user, "clubs.view", club.location)).map((club) => club.id));
+      opsFlags.failedPayments = memberships.filter((s) => visibleClubIds.has(s.clubId) && s.status !== "cancelled" && s.payStatus !== "ok").length;
     }
     if (opsFlags.canHub) {
-      const lines = await getHubDataSource().listLines();
+      const lines = (await getHubDataSource().listLines()).filter((line) => !line.account || can(user, "ordering.view", line.account));
       opsFlags.staleDrafts = lines.filter((l) => isStaleDraft(l)).length;
     }
   } catch (e) {

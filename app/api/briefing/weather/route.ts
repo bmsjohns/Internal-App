@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 
 // Stockport forecast strip (spec §5) via Open-Meteo — free, no key. One
 // forecast covers both venues (they're four miles apart). Nice-to-have:
@@ -27,6 +27,7 @@ function describe(code: number): { desc: string; icon: "sun" | "cloud" | "rain" 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(user, "briefing.view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const date = req.nextUrl.searchParams.get("date") ?? "";
 
   const hit = cache.get(date);

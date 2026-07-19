@@ -14,6 +14,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
   const event = await getEventsDataSource().getEvent((await params).id);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (event.location && !can(user, "events.view", event.location)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   return NextResponse.json({ event });
 }
 
@@ -24,6 +25,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "No events edit access" }, { status: 403 });
   }
   const body = await req.json();
+  const id = (await params).id;
+  const existing = await getEventsDataSource().getEvent(id);
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (existing.location && !can(user, "events.manage", existing.location)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if ((body.roles !== undefined || body.schedule !== undefined) && (!existing.location ? !can(user, "events.staffing.manage") : !can(user, "events.staffing.manage", existing.location))) return NextResponse.json({ error: "Staffing management access required" }, { status: 403 });
   // Partial update: only touch the keys the client sent (optimistic tab
   // saves send small payloads — a schedule change must not blank the name).
   const full = parseEventBody(body);
@@ -36,7 +42,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (input.name !== undefined && !input.name) {
     return NextResponse.json({ error: "Name / author is required" }, { status: 400 });
   }
-  const event = await getEventsDataSource().updateEvent((await params).id, input);
+  if (input.location && !can(user, "events.manage", input.location)) return NextResponse.json({ error: "No access at the destination location" }, { status: 403 });
+  const event = await getEventsDataSource().updateEvent(id, input);
   return NextResponse.json({ event });
 }
 
@@ -46,6 +53,10 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!can(user, "events:edit")) {
     return NextResponse.json({ error: "No events edit access" }, { status: 403 });
   }
-  await getEventsDataSource().deleteEvent((await params).id);
+  const id = (await params).id;
+  const event = await getEventsDataSource().getEvent(id);
+  if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (event.location && !can(user, "events.manage", event.location)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  await getEventsDataSource().deleteEvent(id);
   return NextResponse.json({ ok: true });
 }

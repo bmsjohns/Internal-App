@@ -27,18 +27,22 @@ export async function GET() {
   // Order status is REFLECTED from the hub line (B4) — resolved server-side
   // so club screens never need hub permissions.
   const stateOf = new Map(hubLines.map((l) => [l.id, l.state]));
-  const withState = selections.map((s) => ({
+  const visibleClubs = clubList.filter((club) => can(user, "clubs.view", club.location));
+  const visibleClubIds = new Set(visibleClubs.map((club) => club.id));
+  const visibleMemberships = memberships.filter((membership) => visibleClubIds.has(membership.clubId));
+  const visibleMemberIds = new Set(visibleMemberships.map((membership) => membership.memberId));
+  const withState = selections.filter((selection) => visibleClubIds.has(selection.clubId)).map((s) => ({
     ...s,
     orderState: (s.hubLineId ? (stateOf.get(s.hubLineId) ?? "arrived") : null) as HubLineState | null,
   }));
   return NextResponse.json({
-    clubs: clubList,
-    members,
-    memberships,
+    clubs: visibleClubs,
+    members: members.filter((member) => visibleMemberIds.has(member.id)),
+    memberships: visibleMemberships,
     selections: withState,
     // Publisher options for the pick form (id/name/imprints only — rates and
     // account numbers stay behind hub:view).
     publisherOptions: publishers.map((p) => ({ id: p.id, name: p.name, imprints: p.imprints })),
-    canManage: can(user, "clubs:manage"),
+    canManage: can(user, "clubs.manage"),
   });
 }

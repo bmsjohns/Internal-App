@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getDataSource } from "@/lib/data";
-import { getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 import { canonicalStatus } from "@/lib/config";
 import { exportFilename, exportLocation, uniqueWorksheetName } from "@/lib/export-workbook";
 
@@ -17,8 +17,10 @@ export async function GET(req: NextRequest) {
   const ds = getDataSource();
   const [orders, suppliers] = await Promise.all([ds.listOrders(), ds.listSuppliers()]);
   const location = exportLocation(req.nextUrl.searchParams.get("location"));
+  if (location && !can(user, "ordering.send", location)) return NextResponse.json({ error: "Order sending is not granted for this location" }, { status: 403 });
+  if (!location && !can(user, "ordering.send")) return NextResponse.json({ error: "Order sending access required" }, { status: 403 });
   const outstanding = orders.filter(
-    (o) => canonicalStatus(o.status).key === "needs-ordering" && (!location || o.location === location)
+    (o) => canonicalStatus(o.status).key === "needs-ordering" && (!location || o.location === location) && can(user, "ordering.send", o.location)
   );
 
   const bySupplier = new Map<string, typeof outstanding>();

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 
 // Book metadata lookup for barcode-first entry (spec §2a "speed of entry").
 // Google Books first (cleaner titles/authors), OpenLibrary as fallback.
@@ -50,6 +50,7 @@ async function fromGoogleBooks(isbn: string) {
 export async function GET(_req: NextRequest, { params }: Params) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(user, "orders.manage") && !can(user, "ordering.manage") && !can(user, "clubs.manage")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { isbn: raw } = await params;
   const isbn = raw.replace(/[^0-9Xx]/g, "");
